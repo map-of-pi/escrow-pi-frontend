@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Color system aligned with map-of-pi-frontend */
+:root {
+  --default-primary-color: #386f4f; /* green */
+  --default-secondary-color: #f6c367; /* gold */
+  --default-tertiary-color: #808080;
+  --default-bg-color: #f7f3e6; /* page bg matches form bg */
+}
+
+html, body, #__next { height: 100%; }
+
+body {
+  background: var(--default-bg-color);
+  color: #111827; /* gray-900 */
+}
+
+.btn {
+  @apply w-full py-3 rounded-lg font-semibold shadow-sm transition;
+  background: var(--default-primary-color);
+  color: var(--default-secondary-color) !important;
+  text-decoration: none;
+}
+
+.btn:link,
+.btn:visited,
+.btn:hover,
+.btn:active {
+  color: var(--default-secondary-color) !important;
+  text-decoration: none !important;
+}
+
+.btn.btn-accent {
+  color: #1f2937; /* gray-800 */
+  background: var(--default-secondary-color);
+}
+
+/* Outlined primary button (for History) */
+.btn.btn-outline-primary {
+  @apply w-full py-3 rounded-md font-semibold bg-white border;
+  border-width: 2px;
+  border-color: var(--default-primary-color) !important;
+  color: var(--default-primary-color) !important;
+  text-decoration: none;
+}
+
+.btn.btn-outline-primary:link,
+.btn.btn-outline-primary:visited,
+.btn.btn-outline-primary:hover,
+.btn.btn-outline-primary:active {
+  color: var(--default-primary-color) !important;
+  border-color: var(--default-primary-color) !important;
+  text-decoration: none !important;
+}
+
+.btn.btn-outline-primary:hover {
+  background: rgba(56, 111, 79, 0.05); /* subtle tint of primary */
+}
+
+.btn.btn-outline-primary:focus {
+  outline: 2px solid rgba(56, 111, 79, 0.35);
+  outline-offset: 2px;
+}
+
+/* History button variant: primary background with dark text (as in mock) */
+.btn.btn-dark-text {
+  color: #1f2937 !important; /* gray-800 */
+}
+
+.card {
+  @apply bg-white rounded-xl shadow p-5 border border-gray-100;
+}
+
+/* Navbar title swap without hydration mismatch (local readiness flag)
+   - Default (no data-ready or data-ready='false'): show Loading ...
+   - When data-ready='true' on the navbar container: show EscrowPi Wallet */
+.title-loaded { display: none; }
+[data-ready='true'] .title-loaded { display: inline; }
+[data-ready='true'] .title-loading { display: none; }
+
+/* Disable hamburger by default; enable when navbar is ready */
+.hamburger-btn { pointer-events: none; }
+.hamburger-btn .hamburger-icon { color: var(--default-tertiary-color) !important; cursor: not-allowed; }
+[data-ready='true'] .hamburger-btn { pointer-events: auto; }
+[data-ready='true'] .hamburger-btn .hamburger-icon { color: var(--default-secondary-color) !important; cursor: pointer; }
