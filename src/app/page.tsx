@@ -74,7 +74,7 @@ export default function HomePage() {
   return (
     <div className="space-y-6 px-4">
       <div className="max-w-md mx-auto flex flex-col min-h-[calc(100vh-140px)]">
-        <label className="block text-lg font-black text-gray-900 text-center">Counterparty Pioneer Name</label>
+        <label className="block text-lg font-black text-gray-900 text-center">Payer/Payee Pioneer Name</label>
         <textarea
           value={counterparty}
           onChange={(e) => setCounterparty(e.target.value)}
@@ -113,7 +113,7 @@ export default function HomePage() {
             href="/history"
             className="block w-full text-center py-3 rounded-xl font-semibold shadow-sm bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
           >
-            My EscrowPi History
+            My EscrowPi
           </a>
         </div>
       </div>
@@ -134,13 +134,13 @@ export default function HomePage() {
       >
         <div className="space-y-3 text-sm">
           <div className="grid grid-cols-2 gap-y-2">
-            <div>Counterparty gets:</div>
+            <div>Payee gets:</div>
             <div className="text-right">{(fees.amt || 0).toFixed(1)} pi</div>
 
-            <div>Transaction completion stake:</div>
+            <div className="whitespace-nowrap">{"Transaction completion\u00A0stake:"}</div>
             <div className="text-right">{fees.completionStake.toFixed(1)} pi</div>
 
-            <div className="text-xs text-gray-600 col-span-2">(refunded at end)</div>
+            <div className="text-xs text-gray-600 col-span-2 -mt-1">(refunded to you at end)</div>
 
             <div>Pi Network gas fees:</div>
             <div className="text-right">{fees.networkFees.toFixed(2)} pi</div>
@@ -159,7 +159,7 @@ export default function HomePage() {
         confirmText="Confirm Request"
         title={(
           <div className="space-y-2">
-            <div className="text-center">You are about to request<br />pi from a counterparty</div>
+            <div className="text-center">You are about to request<br />pi from a payer</div>
             <div className="text-center text-3xl font-semibold">{fees.total.toFixed(2)} pi</div>
           </div>
         )}
@@ -169,10 +169,10 @@ export default function HomePage() {
             <div>You get:</div>
             <div className="text-right">{(fees.amt || 0).toFixed(1)} pi</div>
 
-            <div>Transaction completion stake:</div>
+            <div className="whitespace-nowrap">{"Transaction completion\u00A0stake:"}</div>
             <div className="text-right">{fees.completionStake.toFixed(1)} pi</div>
 
-            <div className="text-xs text-gray-600 col-span-2">(refunded at end)</div>
+            <div className="text-xs text-gray-600 col-span-2 -mt-1">(refunded to payer at end)</div>
 
             <div>Pi Network gas fees:</div>
             <div className="text-right">{fees.networkFees.toFixed(2)} pi</div>

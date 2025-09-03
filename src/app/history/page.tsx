@@ -34,7 +34,7 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-center" style={{ color: 'var(--default-primary-color)' }}>My EscrowPi History</h1>
+      <h1 className="text-xl font-bold text-center" style={{ color: 'var(--default-primary-color)' }}>My EscrowPi</h1>
 
       {items.length === 0 ? (
         <div className="text-center text-sm text-gray-600">No transactions yet.</div>
