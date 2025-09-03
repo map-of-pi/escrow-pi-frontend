@@ -178,7 +178,9 @@ export default function HomePage() {
               if (fracPart.length > 5) {
                 const rounded = n.toFixed(5);
                 // Strip trailing zeros and trailing dot
-                const cleaned = rounded.replace(/0+$/g, '').replace(/\.$/, '');
+                let cleaned = rounded.replace(/0+$/g, '').replace(/\.$/, '');
+                // Keep at least one decimal place
+                if (!cleaned.includes('.')) cleaned = cleaned + '.0';
                 setAmount(parseFloat(rounded));
                 setAmountInput(cleaned);
                 return;
@@ -186,7 +188,7 @@ export default function HomePage() {
 
               // For 0..5 decimals, strip trailing zeros in fractional part
               fracPart = fracPart.replace(/0+$/g, '');
-              const out = fracPart ? `${intPart}.${fracPart}` : intPart;
+              const out = fracPart ? `${intPart}.${fracPart}` : `${intPart}.0`;
               setAmount(n);
               setAmountInput(out);
             }}
