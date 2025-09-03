@@ -62,12 +62,47 @@ export default function HomePage() {
     return { amt: base, completionStake, networkFees, escrowFee, total };
   }, [modalAmount]);
 
+  // Format with up to 5 decimals (round if >5), no trailing zeros
+  const fmt = (n: number) => {
+    if (!Number.isFinite(n)) return '';
+    let s = n.toFixed(5); // ensures rounding to 5 dp max
+    if (s.includes('.')) {
+      s = s.replace(/0+$/g, ''); // strip trailing zeros
+      s = s.replace(/\.$/, ''); // strip trailing dot
+    }
+    return s;
+  };
+
   const handleConfirm = (type: 'send' | 'request') => {
     // TODO: Integrate with backend to create EscrowPi transaction
     toast.info(`Demo: ${type === 'send' ? 'Sending' : 'Requesting'} ${fees.amt || 0} Pi via EscrowPi (backend pending)`);
     setShowSend(false);
     setShowRequest(false);
     setModalAmount('');
+  };
+
+  // Validate inputs and open the appropriate modal
+  const handleOpen = (type: 'send' | 'request') => {
+    const name = counterparty.trim();
+    const desc = details.trim();
+    const n = parseFloat((amountInput || '').replace(',', '.'));
+
+    if (!name) {
+      toast.error(type === 'send' ? 'Please enter Payee Pioneer Name' : 'Please enter Payer Pioneer Name');
+      return;
+    }
+    if (!desc) {
+      toast.error('Please enter EscrowPi Details');
+      return;
+    }
+    if (!Number.isFinite(n) || n <= 0) {
+      toast.error('Please enter a Pi amount greater than 0');
+      return;
+    }
+
+    setModalAmount(n);
+    if (type === 'send') setShowSend(true);
+    else setShowRequest(true);
   };
 
   if (loading) return <Splash />;
@@ -108,17 +143,52 @@ export default function HomePage() {
               }
             }}
             onBlur={() => {
-              const normalized = (amountInput || '').replace(',', '.');
+              let normalized = (amountInput || '').replace(',', '.').trim();
               if (normalized === '' || normalized === '.') {
                 setAmount('');
                 setAmountInput('');
                 return;
               }
-              const n = parseFloat(normalized);
-              if (!Number.isNaN(n)) {
-                setAmount(n);
-                setAmountInput(n.toFixed(1));
+
+              // Ensure leading zero if starting with '.'
+              if (normalized.startsWith('.')) normalized = `0${normalized}`;
+              // Match integer and fractional parts
+              const m = normalized.match(/^(\d+)(?:\.(\d*))?$/);
+              if (!m) {
+                setAmount('');
+                setAmountInput('');
+                return;
               }
+              let intPart = m[1] || '0';
+              let fracPart = m[2] ?? '';
+
+              // Remove extra leading zeros in integer part (keep one zero if all zeros)
+              intPart = intPart.replace(/^0+(?=\d)/, '');
+              if (intPart === '') intPart = '0';
+
+              // Compute numeric value
+              const n = parseFloat(intPart + (fracPart !== '' ? `.${fracPart}` : ''));
+              if (Number.isNaN(n)) {
+                setAmount('');
+                setAmountInput('');
+                return;
+              }
+
+              // If more than 5 decimals, round to 5
+              if (fracPart.length > 5) {
+                const rounded = n.toFixed(5);
+                // Strip trailing zeros and trailing dot
+                const cleaned = rounded.replace(/0+$/g, '').replace(/\.$/, '');
+                setAmount(parseFloat(rounded));
+                setAmountInput(cleaned);
+                return;
+              }
+
+              // For 0..5 decimals, strip trailing zeros in fractional part
+              fracPart = fracPart.replace(/0+$/g, '');
+              const out = fracPart ? `${intPart}.${fracPart}` : intPart;
+              setAmount(n);
+              setAmountInput(out);
             }}
             className="text-6xl font-black leading-tight tracking-tight text-center bg-transparent border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent w-full"
             aria-label="Amount in Pi"
@@ -128,21 +198,13 @@ export default function HomePage() {
         <div className="mt-auto grid gap-3 max-w-sm mx-auto w-full pb-6">
           <button
             className="w-full py-3 rounded-xl font-semibold shadow-sm bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
-            onClick={() => {
-              const n = parseFloat((amountInput || '').replace(',', '.'));
-              setShowSend(true);
-              setModalAmount(Number.isFinite(n) ? n : 66);
-            }}
+            onClick={() => handleOpen('send')}
           >
             Pay With EscrowPi
           </button>
           <button
             className="w-full py-3 rounded-xl font-semibold shadow-sm bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
-            onClick={() => {
-              const n = parseFloat((amountInput || '').replace(',', '.'));
-              setShowRequest(true);
-              setModalAmount(Number.isFinite(n) ? n : 66);
-            }}
+            onClick={() => handleOpen('request')}
           >
             Receive With EscrowPi
           </button>
@@ -165,25 +227,25 @@ export default function HomePage() {
         title={(
           <div className="space-y-2">
             <div className="text-center">You are about to send pi<br />from your wallet</div>
-            <div className="text-center text-3xl font-semibold">{fees.total.toFixed(2)} pi</div>
+            <div className="text-center text-3xl font-semibold">{fmt(fees.total)} pi</div>
           </div>
         )}
       >
         <div className="space-y-3 text-sm">
           <div className="grid grid-cols-2 gap-y-2">
             <div>Payee gets:</div>
-            <div className="text-right">{(fees.amt || 0).toFixed(1)} pi</div>
+            <div className="text-right">{fmt(fees.amt || 0)} pi</div>
 
             <div className="whitespace-nowrap">{"Transaction completion\u00A0stake:"}</div>
-            <div className="text-right">{fees.completionStake.toFixed(1)} pi</div>
+            <div className="text-right">{fmt(fees.completionStake)} pi</div>
 
             <div className="text-xs text-gray-600 col-span-2 -mt-1">(refunded to you at end)</div>
 
             <div>Pi Network gas fees:</div>
-            <div className="text-right">{fees.networkFees.toFixed(2)} pi</div>
+            <div className="text-right">{fmt(fees.networkFees)} pi</div>
 
             <div>EscrowPi fee:</div>
-            <div className="text-right">{fees.escrowFee.toFixed(2)} pi</div>
+            <div className="text-right">{fmt(fees.escrowFee)} pi</div>
           </div>
         </div>
       </Modal>
@@ -197,25 +259,25 @@ export default function HomePage() {
         title={(
           <div className="space-y-2">
             <div className="text-center">You are about to request<br />pi from a payer</div>
-            <div className="text-center text-3xl font-semibold">{fees.total.toFixed(2)} pi</div>
+            <div className="text-center text-3xl font-semibold">{fmt(fees.total)} pi</div>
           </div>
         )}
       >
         <div className="space-y-3 text-sm">
           <div className="grid grid-cols-2 gap-y-2">
             <div>You get:</div>
-            <div className="text-right">{(fees.amt || 0).toFixed(1)} pi</div>
+            <div className="text-right">{fmt(fees.amt || 0)} pi</div>
 
             <div className="whitespace-nowrap">{"Transaction completion\u00A0stake:"}</div>
-            <div className="text-right">{fees.completionStake.toFixed(1)} pi</div>
+            <div className="text-right">{fmt(fees.completionStake)} pi</div>
 
             <div className="text-xs text-gray-600 col-span-2 -mt-1">(refunded to payer at end)</div>
 
             <div>Pi Network gas fees:</div>
-            <div className="text-right">{fees.networkFees.toFixed(2)} pi</div>
+            <div className="text-right">{fmt(fees.networkFees)} pi</div>
 
             <div>EscrowPi fee:</div>
-            <div className="text-right">{fees.escrowFee.toFixed(2)} pi</div>
+            <div className="text-right">{fmt(fees.escrowFee)} pi</div>
           </div>
         </div>
       </Modal>
