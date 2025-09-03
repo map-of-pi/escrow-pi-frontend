@@ -17,7 +17,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [counterparty, setCounterparty] = useState('');
   const [details, setDetails] = useState('');
-  const [amount, setAmount] = useState<number | ''>('');
+  const [amount, setAmount] = useState<number | ''>(66);
+  const [amountInput, setAmountInput] = useState<string>('66.0');
   const [modalAmount, setModalAmount] = useState<number | ''>('');
   const [showSend, setShowSend] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
@@ -92,20 +93,56 @@ export default function HomePage() {
             className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 shadow-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--default-primary-color)] focus:border-[var(--default-primary-color)]"
           />
         </div>
-        <div className="mt-16 md:mt-10 text-center">
-          <div className="text-6xl font-black leading-tight tracking-tight">66.0</div>
+        <div className="mt-16 md:mt-6 text-center">
+          <input
+            type="text"
+            inputMode="decimal"
+            pattern="[0-9]*[.,]?[0-9]*"
+            value={amountInput}
+            onChange={(e) => {
+              const raw = e.target.value;
+              const val = raw.replace(',', '.');
+              // allow only digits with at most one decimal point
+              if (/^\d*(?:\.\d*)?$/.test(val)) {
+                setAmountInput(val);
+              }
+            }}
+            onBlur={() => {
+              const normalized = (amountInput || '').replace(',', '.');
+              if (normalized === '' || normalized === '.') {
+                setAmount('');
+                setAmountInput('');
+                return;
+              }
+              const n = parseFloat(normalized);
+              if (!Number.isNaN(n)) {
+                setAmount(n);
+                setAmountInput(n.toFixed(1));
+              }
+            }}
+            className="text-6xl font-black leading-tight tracking-tight text-center bg-transparent border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent w-full"
+            aria-label="Amount in Pi"
+          />
           <div className="text-2xl text-gray-800 -mt-1">Pi</div>
         </div>
         <div className="mt-auto grid gap-3 max-w-sm mx-auto w-full pb-6">
           <button
             className="w-full py-3 rounded-xl font-semibold shadow-sm bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
-            onClick={() => { setShowSend(true); setModalAmount(66); }}
+            onClick={() => {
+              const n = parseFloat((amountInput || '').replace(',', '.'));
+              setShowSend(true);
+              setModalAmount(Number.isFinite(n) ? n : 66);
+            }}
           >
             Pay With EscrowPi
           </button>
           <button
             className="w-full py-3 rounded-xl font-semibold shadow-sm bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
-            onClick={() => { setShowRequest(true); setModalAmount(66); }}
+            onClick={() => {
+              const n = parseFloat((amountInput || '').replace(',', '.'));
+              setShowRequest(true);
+              setModalAmount(Number.isFinite(n) ? n : 66);
+            }}
           >
             Receive With EscrowPi
           </button>
