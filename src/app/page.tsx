@@ -18,7 +18,7 @@ export default function HomePage() {
   const [counterparty, setCounterparty] = useState('');
   const [details, setDetails] = useState('');
   const [amount, setAmount] = useState<number | ''>(66);
-  const [amountInput, setAmountInput] = useState<string>('66.0');
+  const [amountInput, setAmountInput] = useState<string>('1.0');
   const [modalAmount, setModalAmount] = useState<number | ''>('');
   const [showSend, setShowSend] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
