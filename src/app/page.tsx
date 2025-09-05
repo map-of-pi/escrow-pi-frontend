@@ -62,16 +62,28 @@ export default function HomePage() {
     return { amt: base, completionStake, networkFees, escrowFee, total };
   }, [modalAmount]);
 
-  // Format with up to 5 decimals (round if >5), no trailing zeros
+  // Format with up to 7 decimals (round if >7), no trailing zeros
   const fmt = (n: number) => {
     if (!Number.isFinite(n)) return '';
-    let s = n.toFixed(5); // ensures rounding to 5 dp max
+    let s = n.toFixed(7); // ensures rounding to 7 dp max
     if (s.includes('.')) {
       s = s.replace(/0+$/g, ''); // strip trailing zeros
       s = s.replace(/\.$/, ''); // strip trailing dot
     }
     return s;
   };
+
+  // Adaptive font-size for the big amount input so long numbers don't overflow
+  const amountFontSize = useMemo(() => {
+    const s = String(amountInput ?? '');
+    const len = s.length || 1;
+    if (len <= 6) return '64px'; // ~text-6xl
+    if (len <= 8) return '56px';
+    if (len <= 10) return '48px'; // ~text-4xl/5xl
+    if (len <= 12) return '40px';
+    if (len <= 16) return '32px';
+    return '28px';
+  }, [amountInput]);
 
   const handleConfirm = (type: 'send' | 'request') => {
     // TODO: Integrate with backend to create EscrowPi transaction
@@ -128,40 +140,53 @@ export default function HomePage() {
             className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 shadow-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--default-primary-color)] focus:border-[var(--default-primary-color)]"
           />
         </div>
-        <div className="mt-16 md:mt-6 text-center">
-          <input
-            type="text"
-            inputMode="decimal"
-            pattern="[0-9]*[.,]?[0-9]*"
-            value={amountInput}
-            onChange={(e) => {
-              const raw = e.target.value;
-              const val = raw.replace(',', '.');
-              // allow only digits with at most one decimal point
-              if (/^\d*(?:\.\d*)?$/.test(val)) {
+        <div className="mt-16 md:mt-6 text-center relative">
+          {(showSend || showRequest) && (
+            <div className="absolute inset-0 z-10 rounded-xl bg-white/80 backdrop-blur-sm"></div>
+          )}
+          <div className="flex items-center justify-center w-full" style={{ height: '80px' }}>
+            <input
+              type="text"
+              inputMode="decimal"
+              pattern="[0-9]*[.,]?[0-9]*"
+              value={amountInput}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const val = raw.replace(',', '.');
+                // allow only digits with at most one decimal point
+                if (!/^\d*(?:\.\d*)?$/.test(val)) return;
+                // enforce integer (<=11) and decimal (<=7) limits
+                const parts = val.split('.');
+                const intPart = parts[0] ?? '';
+                const fracPart = parts[1] ?? '';
+                if (intPart.length > 11) return; // reject if integer part too long
+                if (fracPart.length > 7) return; // reject if decimal part too long
                 setAmountInput(val);
-              }
-            }}
-            onBlur={() => {
-              let normalized = (amountInput || '').replace(',', '.').trim();
-              if (normalized === '' || normalized === '.') {
-                setAmount('');
-                setAmountInput('');
-                return;
-              }
+              }}
+              onBlur={() => {
+                let normalized = (amountInput || '').replace(',', '.').trim();
+                if (normalized === '' || normalized === '.') {
+                  // When no value, default to 0.0
+                  setAmount(0);
+                  setAmountInput('0.0');
+                  return;
+                }
 
-              // Ensure leading zero if starting with '.'
-              if (normalized.startsWith('.')) normalized = `0${normalized}`;
-              // Match integer and fractional parts
-              const m = normalized.match(/^(\d+)(?:\.(\d*))?$/);
-              if (!m) {
-                setAmount('');
-                setAmountInput('');
-                return;
-              }
-              let intPart = m[1] || '0';
-              let fracPart = m[2] ?? '';
+                // Ensure leading zero if starting with '.'
+                if (normalized.startsWith('.')) normalized = `0${normalized}`;
+                // Match integer and fractional parts
+                const m = normalized.match(/^(\d+)(?:\.(\d*))?$/);
+                if (!m) {
+                  setAmount('');
+                  setAmountInput('');
+                  return;
+                }
+                let intPart = m[1] || '0';
+                let fracPart = m[2] ?? '';
 
+                // Remove extra leading zeros in integer part (keep one zero if all zeros)
+                intPart = intPart.replace(/^0+(?=\d)/, '');
+                if (intPart === '') intPart = '0';
               // Remove extra leading zeros in integer part (keep one zero if all zeros)
               intPart = intPart.replace(/^0+(?=\d)/, '');
               if (intPart === '') intPart = '0';
@@ -174,9 +199,9 @@ export default function HomePage() {
                 return;
               }
 
-              // If more than 5 decimals, round to 5
-              if (fracPart.length > 5) {
-                const rounded = n.toFixed(5);
+              // If more than 7 decimals, round to 7
+              if (fracPart.length > 7) {
+                const rounded = n.toFixed(7);
                 // Strip trailing zeros and trailing dot
                 let cleaned = rounded.replace(/0+$/g, '').replace(/\.$/, '');
                 // Keep at least one decimal place
@@ -186,15 +211,17 @@ export default function HomePage() {
                 return;
               }
 
-              // For 0..5 decimals, strip trailing zeros in fractional part
+              // For 0..7 decimals, strip trailing zeros in fractional part
               fracPart = fracPart.replace(/0+$/g, '');
               const out = fracPart ? `${intPart}.${fracPart}` : `${intPart}.0`;
               setAmount(n);
               setAmountInput(out);
             }}
-            className="text-6xl font-black leading-tight tracking-tight text-center bg-transparent border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent w-full"
-            aria-label="Amount in Pi"
-          />
+              className="font-black tracking-tight text-center bg-transparent border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent w-full"
+              style={{ fontSize: amountFontSize, lineHeight: 1 }}
+              aria-label="Amount in Pi"
+            />
+          </div>
           <div className="text-2xl text-gray-800 -mt-1">Pi</div>
         </div>
         <div className="mt-auto grid gap-3 max-w-sm mx-auto w-full pb-6">
