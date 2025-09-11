@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
+import transactions from '@/data/transactions.json';
 
 type TxStatus = 'pi_requested' | 'pi_sent' | 'cancelled' | 'declined' | 'disputed' | 'fulfilled' | 'completed';
 
@@ -42,28 +43,22 @@ export default function TxDetailsPage() {
   const params = useParams();
   const id = String(params?.id || '');
 
-  // Mock store (should come from API)
+  // Load from shared mock JSON
   const initial = useMemo<Tx | undefined>(() => {
-    const all: Tx[] = [
-      // As payer: request awaiting my confirmation
-      { id: 'tx_pi_requested', direction: 'receive', myRole: 'payer', counterparty: '@merchantA', amount: 74.61, status: 'pi_requested', date: '2025-09-03T07:30:00Z', notes: 'Order F-714', needsPayerResponse: true },
-      // As payer: I already sent Pi to Escrow
-      { id: 'tx_pi_sent', direction: 'send', myRole: 'payer', counterparty: '@alice', amount: 12.5, status: 'pi_sent', date: '2025-09-01T12:15:00Z', notes: 'Invoice #A1001' },
-      // As payee: I have fulfilled the service and waiting payer to complete
-      { id: 'tx_fulfilled', direction: 'receive', myRole: 'payee', counterparty: '@vendorZ', amount: 5.2, status: 'fulfilled', date: '2025-08-28T09:00:00Z', notes: 'Service ticket #884' },
-      // Either role: disputed
-      { id: 'tx_disputed', direction: 'send', myRole: 'payer', counterparty: '@shopY', amount: 2.75, status: 'disputed', date: '2025-08-27T18:20:00Z', notes: 'Case D-123' },
-      // Completed
-      { id: 'tx_completed', direction: 'receive', myRole: 'payer', counterparty: '@bob', amount: 3, status: 'completed', date: '2025-08-24T11:05:00Z', notes: 'Ref B-339' },
-      // Cancelled and Declined examples
-      { id: 'tx_cancelled', direction: 'send', myRole: 'payer', counterparty: '@charlie', amount: 1.5, status: 'cancelled', date: '2025-08-20T09:10:00Z' },
-      { id: 'tx_declined', direction: 'receive', myRole: 'payee', counterparty: '@mike', amount: 6.0, status: 'declined', date: '2025-08-18T14:45:00Z', notes: 'Order M-778' },
-    ];
-    return all.find((t) => t.id === id);
+    return (transactions as unknown as Tx[]).find((t) => t.id === id);
   }, [id]);
 
   const [tx, setTx] = useState<Tx | undefined>(initial);
   const [showPopup, setShowPopup] = useState<boolean>(!!(tx?.needsPayerResponse && tx.direction === 'receive' && tx.status === 'pi_requested'));
+  const [showComments, setShowComments] = useState<boolean>(false);
+  type Comment = { author: string; text: string; ts: string };
+  const initialComments: Comment[] = useMemo(() => {
+    if (!tx) return [];
+    const author = tx.myRole === 'payer' ? tx.counterparty : 'You';
+    return tx.notes ? [{ author, text: tx.notes, ts: tx.date }] : [];
+  }, [tx]);
+  const [comments, setComments] = useState<Comment[]>(initialComments);
+  const [newComment, setNewComment] = useState<string>("");
 
   // Helpers to display the popup breakdown like on the mock
   const fmt = (n: number) => {
@@ -109,8 +104,8 @@ export default function TxDetailsPage() {
   const arrow = tx.myRole === 'payer' ? 'You →' : 'You ←';
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
+    <div className="space-y-4 pb-36">
+      <div className="relative flex items-center gap-2">
         <button
           aria-label="Go back"
           className="inline-flex items-center justify-center h-9 w-9 rounded-full border hover:bg-gray-50"
@@ -120,7 +115,9 @@ export default function TxDetailsPage() {
             <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
         </button>
-        <h1 className="text-lg font-bold" style={{ color: 'var(--default-primary-color)' }}>EscrowPi Transaction</h1>
+        <h1 className="absolute left-1/2 -translate-x-1/2 text-lg font-bold text-center" style={{ color: 'var(--default-primary-color)' }}>
+          EscrowPi Transaction
+        </h1>
       </div>
 
       <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -144,76 +141,110 @@ export default function TxDetailsPage() {
         )}
       </div>
 
-      <details open className="rounded-xl border bg-white p-4 shadow-sm">
-        <summary className="cursor-pointer select-none font-semibold">EscrowPi Transaction Details</summary>
+      <details open>
+        <summary className="cursor-pointer select-none font-semibold inline-flex items-center gap-2 mt-2">
+          <span>EscrowPi Transaction Details</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </summary>
         <div className="mt-3 space-y-3 text-sm">
-          <div className="rounded-lg border p-3 bg-gray-50">
-            <div className="font-semibold mb-2">Transaction Status</div>
-            <ol className="space-y-1 text-xs">
-              <li className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2 w-2 rounded-full ${tx.status !== 'pi_requested' ? 'bg-green-600' : 'bg-gray-300'}`}></span>
-                  <span>Pi_requested</span>
-                </div>
-                <span className="text-[10px] uppercase tracking-wide text-gray-500">{tx.status === 'pi_requested' ? 'Current step' : 'Step complete'}</span>
-              </li>
-              <li className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2 w-2 rounded-full ${(tx.status === 'pi_sent' || tx.status === 'fulfilled' || tx.status === 'completed') ? 'bg-green-600' : 'bg-gray-300'}`}></span>
-                  <span>Pi_sent</span>
-                </div>
-                <span className="text-[10px] uppercase tracking-wide text-gray-500">{tx.status === 'pi_sent' ? 'Current step' : (tx.status === 'pi_requested' ? 'Future step' : 'Step complete')}</span>
-              </li>
-              <li className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2 w-2 rounded-full ${(tx.status === 'fulfilled' || tx.status === 'completed') ? 'bg-green-600' : 'bg-gray-300'}`}></span>
-                  <span>Fulfilled</span>
-                </div>
-                <span className="text-[10px] uppercase tracking-wide text-gray-500">{tx.status === 'fulfilled' ? 'Current step' : (tx.status === 'completed' ? 'Step complete' : 'Future step')}</span>
-              </li>
-              <li className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2 w-2 rounded-full ${tx.status === 'completed' ? 'bg-green-600' : 'bg-gray-300'}`}></span>
-                  <span>Completed</span>
-                </div>
-                <span className="text-[10px] uppercase tracking-wide text-gray-500">{tx.status === 'completed' ? 'Current step' : 'Future step'}</span>
-              </li>
-            </ol>
-          </div>
-
-          {!(tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'disputed' || tx.status === 'completed') && (
-            <div className="grid grid-cols-2 gap-2">
-              {/* Payer: respond when requested */}
-              <button
-                disabled={!(tx.myRole === 'payer' && tx.status === 'pi_requested' && tx.needsPayerResponse)}
-                className={`py-2 rounded-lg text-sm font-semibold ${tx.myRole === 'payer' && tx.status === 'pi_requested' && tx.needsPayerResponse ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500'}`}
-                onClick={() => setShowPopup(true)}
-              >
-                Respond to Request
-              </button>
-
-              {/* Payee: after payer sends Pi, mark as fulfilled */}
-              {tx.myRole === 'payee' ? (
-                <button
-                  disabled={tx.status !== 'pi_sent'}
-                  className={`py-2 rounded-lg text-sm font-semibold ${tx.status === 'pi_sent' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500'}`}
-                  onClick={() => setTx({ ...tx, status: 'fulfilled' })}
-                >
-                  Mark Fulfilled
-                </button>
+          
+          {/* UC1: Transaction Commentary */}
+          <div className="min-h-28" aria-label="Open all comments">
+            <div className="font-semibold mb-2 text-center">Transaction Commentary</div>
+            <div
+              className="rounded-lg border p-3 bg-white min-h-40 cursor-pointer hover:bg-gray-50"
+              onClick={() => setShowComments(true)}
+            >
+              {comments.length === 0 ? (
+                <div className="text-xs text-gray-600">No comments yet.</div>
               ) : (
-                <button
-                  disabled={tx.status !== 'fulfilled'}
-                  className={`py-2 rounded-lg text-sm font-semibold ${tx.status === 'fulfilled' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500'}`}
-                  onClick={() => setTx({ ...tx, status: 'completed' })}
-                >
-                  Mark Complete
-                </button>
+                <div className="space-y-1 text-xs">
+                  {[...comments].slice(-3).map((c, idx) => (
+                    <div key={idx} className="py-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-[13px]">{c.author}</span>
+                        <span className="text-[11px] text-gray-500">{new Date(c.ts).toLocaleString()}</span>
+                      </div>
+                      <div className="whitespace-pre-wrap break-words text-[13px]">{c.text}</div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          )}
+          </div>
+
+          {/* UC1: Add New Comment */}
+          <div className="min-h-28">
+            <div className="font-semibold mb-2 text-center">Add New Comment</div>
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              rows={4}
+              placeholder="Type your comment. You can include contact info or links."
+              className="w-full rounded border p-2 text-xs"
+            />
+            <div className="mt-2 flex justify-end">
+              <button
+                disabled={newComment.trim().length === 0}
+                className={`px-3 py-2 rounded text-xs font-semibold ${newComment.trim().length ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500'}`}
+                onClick={() => {
+                  const entry: Comment = { author: 'You', text: newComment.trim(), ts: new Date().toISOString() };
+                  setComments((prev) => [...prev, entry]);
+                  setNewComment('');
+                }}
+              >
+                Add Comment
+              </button>
+            </div>
+          </div>
         </div>
       </details>
+
+      {/* UC1: Action section (varies by status/role) - fixed to bottom */}
+      <div
+        className="fixed inset-x-0 z-10 px-4"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
+      >
+        <div className="rounded-lg border p-3 bg-gray-50 shadow">
+          <div className="font-semibold mb-2">Action</div>
+          {!(tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'disputed' || tx.status === 'completed') && (
+            <div className="grid grid-cols-2 gap-2">
+            {/* Payer: respond when requested */}
+            <button
+              disabled={!(tx.myRole === 'payer' && tx.status === 'pi_requested' && tx.needsPayerResponse)}
+              className={`py-2 rounded-lg text-sm font-semibold ${tx.myRole === 'payer' && tx.status === 'pi_requested' && tx.needsPayerResponse ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500'}`}
+              onClick={() => setShowPopup(true)}
+            >
+              Respond to Request
+            </button>
+
+            {/* Payee: after payer sends Pi, mark as fulfilled */}
+            {tx.myRole === 'payee' ? (
+              <button
+                disabled={tx.status !== 'pi_sent'}
+                className={`py-2 rounded-lg text-sm font-semibold ${tx.status === 'pi_sent' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500'}`}
+                onClick={() => setTx({ ...tx, status: 'fulfilled' })}
+              >
+                Mark Fulfilled
+              </button>
+            ) : (
+              <button
+                disabled={tx.status !== 'fulfilled'}
+                className={`py-2 rounded-lg text-sm font-semibold ${tx.status === 'fulfilled' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500'}`}
+                onClick={() => setTx({ ...tx, status: 'completed' })}
+              >
+                Mark Complete
+              </button>
+            )}
+          </div>
+        )}
+        {(tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'disputed' || tx.status === 'completed') && (
+          <div className="text-xs text-gray-600">No actions available for this transaction.</div>
+        )}
+        </div>
+      </div>
 
       {/* Confirm/Decline popup for unresponded receive request where I'm the payer */}
       {tx.myRole === 'payer' && tx.status === 'pi_requested' && tx.needsPayerResponse && (
@@ -272,6 +303,32 @@ export default function TxDetailsPage() {
                 Decline Request
               </button>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Full-screen reader for all comments */}
+      {showComments && (
+        <Modal
+          open={showComments}
+          onClose={() => setShowComments(false)}
+          title={<div className="font-semibold">Transaction Commentary</div>}
+          fullScreen
+        >
+          <div className="space-y-2 text-sm overflow-auto pr-1">
+            {comments.length === 0 ? (
+              <div className="text-xs text-gray-600">No comments yet.</div>
+            ) : (
+              comments.map((c, i) => (
+                <div key={i} className="py-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-[13px]">{c.author}</span>
+                    <span className="text-[11px] text-gray-500">{new Date(c.ts).toLocaleString()}</span>
+                  </div>
+                  <div className="whitespace-pre-wrap break-words text-[13px]">{c.text}</div>
+                </div>
+              ))
+            )}
           </div>
         </Modal>
       )}

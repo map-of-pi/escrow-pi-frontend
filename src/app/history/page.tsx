@@ -1,6 +1,7 @@
 "use client";
 import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import transactions from '@/data/transactions.json';
 
 // Align statuses to the spec for the history cards
 // Display labels must be exactly one of: Pi_requested, Pi_sent, Cancelled, Declined, Disputed, Fulfilled, Completed, New
@@ -50,20 +51,7 @@ const statusLabel: Record<TxStatus, string> = {
 
 export default function HistoryPage() {
   const router = useRouter();
-  const items = useMemo<TxItem[]>(
-    () => [
-      // In-progress first
-      { id: 'tx_pi_requested', direction: 'receive', myRole: 'payer', counterparty: '@merchantA', amount: 74.61, status: 'pi_requested', date: '2025-09-03T07:30:00Z', notes: 'Order F-714' },
-      { id: 'tx_pi_sent', direction: 'send', myRole: 'payer', counterparty: '@alice', amount: 12.5, status: 'pi_sent', date: '2025-09-01T12:15:00Z', notes: 'Invoice #A1001' },
-      { id: 'tx_fulfilled', direction: 'receive', myRole: 'payee', counterparty: '@vendorZ', amount: 5.2, status: 'fulfilled', date: '2025-08-28T09:00:00Z', notes: 'Service ticket #884' },
-      { id: 'tx_disputed', direction: 'send', myRole: 'payer', counterparty: '@shopY', amount: 2.75, status: 'disputed', date: '2025-08-27T18:20:00Z', notes: 'Case D-123' },
-      // Resolutions / others
-      { id: 'tx_completed', direction: 'receive', myRole: 'payer', counterparty: '@bob', amount: 3, status: 'completed', date: '2025-08-24T11:05:00Z', notes: 'Ref B-339' },
-      { id: 'tx_cancelled', direction: 'send', myRole: 'payer', counterparty: '@charlie', amount: 1.5, status: 'cancelled', date: '2025-08-20T09:10:00Z' },
-      { id: 'tx_declined', direction: 'receive', myRole: 'payee', counterparty: '@mike', amount: 6.0, status: 'declined', date: '2025-08-18T14:45:00Z', notes: 'Order M-778' },
-    ],
-    []
-  );
+  const items = useMemo<TxItem[]>(() => (transactions as unknown as TxItem[]), []);
 
   return (
     <div className="space-y-4">
