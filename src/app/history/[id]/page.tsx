@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
 
-type TxStatus = 'pi_requested' | 'pi_sent' | 'cancelled' | 'declined' | 'disputed' | 'fullfilled' | 'completed';
+type TxStatus = 'pi_requested' | 'pi_sent' | 'cancelled' | 'declined' | 'disputed' | 'fulfilled' | 'completed';
 
 type Tx = {
   id: string;
@@ -23,8 +23,18 @@ const statusLabel: Record<TxStatus, string> = {
   cancelled: 'Cancelled',
   declined: 'Declined',
   disputed: 'Disputed',
-  fullfilled: 'Fullfilled',
+  fulfilled: 'Fulfilled',
   completed: 'Completed',
+};
+
+const statusClasses: Record<TxStatus, string> = {
+  pi_requested: 'bg-amber-50 text-amber-800 border-amber-200',
+  pi_sent: 'bg-blue-50 text-blue-800 border-blue-200',
+  cancelled: 'bg-gray-50 text-gray-700 border-gray-200',
+  declined: 'bg-gray-50 text-gray-700 border-gray-200',
+  disputed: 'bg-red-50 text-red-800 border-red-200',
+  fulfilled: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  completed: 'bg-green-50 text-green-800 border-green-200',
 };
 
 export default function TxDetailsPage() {
@@ -40,7 +50,7 @@ export default function TxDetailsPage() {
       // As payer: I already sent Pi to Escrow
       { id: 'tx_pi_sent', direction: 'send', myRole: 'payer', counterparty: '@alice', amount: 12.5, status: 'pi_sent', date: '2025-09-01T12:15:00Z', notes: 'Invoice #A1001' },
       // As payee: I have fulfilled the service and waiting payer to complete
-      { id: 'tx_fullfilled', direction: 'receive', myRole: 'payee', counterparty: '@vendorZ', amount: 5.2, status: 'fullfilled', date: '2025-08-28T09:00:00Z', notes: 'Service ticket #884' },
+      { id: 'tx_fulfilled', direction: 'receive', myRole: 'payee', counterparty: '@vendorZ', amount: 5.2, status: 'fulfilled', date: '2025-08-28T09:00:00Z', notes: 'Service ticket #884' },
       // Either role: disputed
       { id: 'tx_disputed', direction: 'send', myRole: 'payer', counterparty: '@shopY', amount: 2.75, status: 'disputed', date: '2025-08-27T18:20:00Z', notes: 'Case D-123' },
       // Completed
@@ -119,7 +129,7 @@ export default function TxDetailsPage() {
             <span className="mr-2">{arrow}</span>
             <span>{tx.counterparty}</span>
           </div>
-          <div className="text-xs px-2 py-1 rounded border bg-gray-50">{statusLabel[tx.status]}</div>
+          <div className={`text-xs px-2 py-1 rounded border ${statusClasses[tx.status]}`}>{statusLabel[tx.status]}</div>
         </div>
         <div className="mt-2 text-center">
           <div className="text-sm text-gray-600">Payment transfer amount</div>
@@ -149,17 +159,17 @@ export default function TxDetailsPage() {
               </li>
               <li className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2 w-2 rounded-full ${(tx.status === 'pi_sent' || tx.status === 'fullfilled' || tx.status === 'completed') ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                  <span className={`inline-block h-2 w-2 rounded-full ${(tx.status === 'pi_sent' || tx.status === 'fulfilled' || tx.status === 'completed') ? 'bg-green-600' : 'bg-gray-300'}`}></span>
                   <span>Pi_sent</span>
                 </div>
                 <span className="text-[10px] uppercase tracking-wide text-gray-500">{tx.status === 'pi_sent' ? 'Current step' : (tx.status === 'pi_requested' ? 'Future step' : 'Step complete')}</span>
               </li>
               <li className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2 w-2 rounded-full ${(tx.status === 'fullfilled' || tx.status === 'completed') ? 'bg-green-600' : 'bg-gray-300'}`}></span>
-                  <span>Fullfilled</span>
+                  <span className={`inline-block h-2 w-2 rounded-full ${(tx.status === 'fulfilled' || tx.status === 'completed') ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                  <span>Fulfilled</span>
                 </div>
-                <span className="text-[10px] uppercase tracking-wide text-gray-500">{tx.status === 'fullfilled' ? 'Current step' : (tx.status === 'completed' ? 'Step complete' : 'Future step')}</span>
+                <span className="text-[10px] uppercase tracking-wide text-gray-500">{tx.status === 'fulfilled' ? 'Current step' : (tx.status === 'completed' ? 'Step complete' : 'Future step')}</span>
               </li>
               <li className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -182,19 +192,19 @@ export default function TxDetailsPage() {
                 Respond to Request
               </button>
 
-              {/* Payee: after payer sends Pi, mark as fullfilled */}
+              {/* Payee: after payer sends Pi, mark as fulfilled */}
               {tx.myRole === 'payee' ? (
                 <button
                   disabled={tx.status !== 'pi_sent'}
                   className={`py-2 rounded-lg text-sm font-semibold ${tx.status === 'pi_sent' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500'}`}
-                  onClick={() => setTx({ ...tx, status: 'fullfilled' })}
+                  onClick={() => setTx({ ...tx, status: 'fulfilled' })}
                 >
-                  Mark Fullfilled
+                  Mark Fulfilled
                 </button>
               ) : (
                 <button
-                  disabled={tx.status !== 'fullfilled'}
-                  className={`py-2 rounded-lg text-sm font-semibold ${tx.status === 'fullfilled' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500'}`}
+                  disabled={tx.status !== 'fulfilled'}
+                  className={`py-2 rounded-lg text-sm font-semibold ${tx.status === 'fulfilled' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500'}`}
                   onClick={() => setTx({ ...tx, status: 'completed' })}
                 >
                   Mark Complete

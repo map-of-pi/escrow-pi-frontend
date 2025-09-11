@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 
 // Align statuses to the spec for the history cards
-// Display labels must be exactly one of: Pi_requested, Pi_sent, Cancelled, Declined, Disputed, Fullfilled, Completed, New
+// Display labels must be exactly one of: Pi_requested, Pi_sent, Cancelled, Declined, Disputed, Fulfilled, Completed, New
 type TxStatus =
 | 'new'
   | 'pi_requested'
@@ -11,7 +11,7 @@ type TxStatus =
   | 'cancelled'
   | 'declined'
   | 'disputed'
-  | 'fullfilled'
+  | 'fulfilled'
   | 'completed';
 type Direction = 'send' | 'receive';
 
@@ -33,7 +33,7 @@ const statusClasses: Record<TxStatus, string> = {
   cancelled: 'bg-gray-50 text-gray-700 border-gray-200',
   declined: 'bg-gray-50 text-gray-700 border-gray-200',
   disputed: 'bg-red-50 text-red-800 border-red-200',
-  fullfilled: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  fulfilled: 'bg-emerald-50 text-emerald-800 border-emerald-200',
   completed: 'bg-green-50 text-green-800 border-green-200',
 };
 
@@ -43,7 +43,7 @@ const statusLabel: Record<TxStatus, string> = {
   cancelled: 'Cancelled',
   declined: 'Declined',
   disputed: 'Disputed',
-  fullfilled: 'Fullfilled',
+  fulfilled: 'Fulfilled',
   completed: 'Completed',
   new: 'New',
 };
@@ -55,7 +55,7 @@ export default function HistoryPage() {
       // In-progress first
       { id: 'tx_pi_requested', direction: 'receive', myRole: 'payer', counterparty: '@merchantA', amount: 74.61, status: 'pi_requested', date: '2025-09-03T07:30:00Z', notes: 'Order F-714' },
       { id: 'tx_pi_sent', direction: 'send', myRole: 'payer', counterparty: '@alice', amount: 12.5, status: 'pi_sent', date: '2025-09-01T12:15:00Z', notes: 'Invoice #A1001' },
-      { id: 'tx_fullfilled', direction: 'receive', myRole: 'payee', counterparty: '@vendorZ', amount: 5.2, status: 'fullfilled', date: '2025-08-28T09:00:00Z', notes: 'Service ticket #884' },
+      { id: 'tx_fulfilled', direction: 'receive', myRole: 'payee', counterparty: '@vendorZ', amount: 5.2, status: 'fulfilled', date: '2025-08-28T09:00:00Z', notes: 'Service ticket #884' },
       { id: 'tx_disputed', direction: 'send', myRole: 'payer', counterparty: '@shopY', amount: 2.75, status: 'disputed', date: '2025-08-27T18:20:00Z', notes: 'Case D-123' },
       // Resolutions / others
       { id: 'tx_completed', direction: 'receive', myRole: 'payer', counterparty: '@bob', amount: 3, status: 'completed', date: '2025-08-24T11:05:00Z', notes: 'Ref B-339' },
