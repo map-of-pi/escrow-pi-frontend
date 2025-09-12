@@ -15,7 +15,7 @@ function Splash() {
 
 export default function HomePage() {
   // Always start as loading on server and first client render to avoid hydration mismatch
-  const { currentUser } = useContext(AppContext);
+  const { currentUser, autoLoginUser } = useContext(AppContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [counterparty, setCounterparty] = useState('');
   const [details, setDetails] = useState('');
@@ -119,7 +119,10 @@ export default function HomePage() {
     else setShowRequest(true);
   };
 
-  if (!currentUser) return <Splash />;
+  if (!currentUser) {
+    autoLoginUser()
+    return <Splash />;
+  }
 
   return (
     <div className="space-y-6 px-4">
