@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
 import transactions from '@/data/transactions.json';
@@ -60,6 +60,30 @@ export default function TxDetailsPage() {
   const [comments, setComments] = useState<Comment[]>(initialComments);
   const [newComment, setNewComment] = useState<string>("");
 
+  // Commentary preview measurement using translateY to keep latest visible without cutting
+  const previewContainerRef = useRef<HTMLDivElement | null>(null);
+  const previewContentRef = useRef<HTMLDivElement | null>(null);
+  const [offsetPx, setOffsetPx] = useState(0);
+
+  useEffect(() => {
+    const measure = () => {
+      const c = previewContainerRef.current;
+      const i = previewContentRef.current;
+      if (!c || !i) return;
+      const overflow = i.scrollHeight - c.clientHeight;
+      const next = overflow > 0 ? Math.ceil(overflow) : 0;
+      setOffsetPx((prev) => (Math.abs(prev - next) > 0.5 ? next : prev));
+    };
+    // measure once after paint when comments change
+    const id = window.requestAnimationFrame(measure);
+    const onResize = () => window.requestAnimationFrame(measure);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.cancelAnimationFrame(id);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [comments]);
+
   // Helpers to display the popup breakdown like on the mock
   const fmt = (n: number) => {
     if (!Number.isFinite(n)) return '';
@@ -104,7 +128,7 @@ export default function TxDetailsPage() {
   const arrow = tx.myRole === 'payer' ? 'You →' : 'You ←';
 
   return (
-    <div className="space-y-4 pb-36">
+    <div className="space-y-4 md:space-y-3 lg:space-y-2 pb-36">
       <div className="relative flex items-center gap-2">
         <button
           aria-label="Go back"
@@ -148,20 +172,25 @@ export default function TxDetailsPage() {
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </summary>
-        <div className="mt-3 space-y-3 text-sm">
+        <div className="mt-3 md:mt-2 space-y-3 md:space-y-2 lg:space-y-1 text-sm max-h-[50dvh] overflow-auto">
           
           {/* UC1: Transaction Commentary */}
           <div className="min-h-28" aria-label="Open all comments">
-            <div className="font-semibold mb-2 text-center">Transaction Commentary</div>
+            <div className="font-semibold mb-2 md:mb-1 text-center">Transaction Commentary</div>
             <div
-              className="rounded-lg border p-3 bg-white min-h-40 cursor-pointer hover:bg-gray-50"
+              ref={previewContainerRef}
+              className={`rounded-lg border p-3 md:p-2 bg-white h-40 overflow-hidden cursor-pointer hover:bg-gray-50 flex flex-col justify-start`}
               onClick={() => setShowComments(true)}
             >
               {comments.length === 0 ? (
                 <div className="text-xs text-gray-600">No comments yet.</div>
               ) : (
-                <div className="space-y-1 text-xs">
-                  {[...comments].slice(-3).map((c, idx) => (
+                <div
+                  ref={previewContentRef}
+                  className="space-y-1 text-xs will-change-transform pb-3"
+                  style={{ transform: `translateY(-${offsetPx}px)` }}
+                >
+                  {comments.map((c, idx) => (
                     <div key={idx} className="py-1">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-[13px]">{c.author}</span>
@@ -177,7 +206,7 @@ export default function TxDetailsPage() {
 
           {/* UC1: Add New Comment */}
           <div className="min-h-28">
-            <div className="font-semibold mb-2 text-center">Add New Comment</div>
+            <div className="font-semibold mb-2 md:mb-1 text-center">Add New Comment</div>
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
@@ -207,7 +236,7 @@ export default function TxDetailsPage() {
         className="fixed inset-x-0 z-10 px-4"
         style={{ bottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
       >
-        <div className="rounded-lg border p-3 bg-gray-50 shadow">
+        <div className="w-full max-w-md mx-auto rounded-lg border p-3 bg-gray-50 shadow">
           <div className="font-semibold mb-2">Action</div>
           {!(tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'disputed' || tx.status === 'completed') && (
             <div className="grid grid-cols-2 gap-2">
