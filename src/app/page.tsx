@@ -1,8 +1,9 @@
 "use client";
-import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState, useContext } from 'react';
 import Image from 'next/image';
 import Modal from '@/components/Modal';
 import { toast } from 'react-toastify';
+import { AppContext } from '@/context/AppContextProvider';
 
 function Splash() {
   return (
@@ -14,6 +15,7 @@ function Splash() {
 
 export default function HomePage() {
   // Always start as loading on server and first client render to avoid hydration mismatch
+  const { currentUser } = useContext(AppContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [counterparty, setCounterparty] = useState('');
   const [details, setDetails] = useState('');
@@ -117,7 +119,7 @@ export default function HomePage() {
     else setShowRequest(true);
   };
 
-  if (loading) return <Splash />;
+  if (!currentUser) return <Splash />;
 
   return (
     <div className="space-y-6 px-4">
