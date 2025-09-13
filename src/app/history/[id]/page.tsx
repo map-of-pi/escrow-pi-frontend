@@ -52,6 +52,7 @@ export default function TxDetailsPage() {
   const [showPopup, setShowPopup] = useState<boolean>(!!(tx?.needsPayerResponse && tx.direction === 'receive' && tx.status === 'pi_requested'));
   const [showAccept, setShowAccept] = useState<boolean>(false);
   const [showReject, setShowReject] = useState<boolean>(false);
+  const [showCancel, setShowCancel] = useState<boolean>(false);
   const [actionBanner, setActionBanner] = useState<string>("");
   const [showComments, setShowComments] = useState<boolean>(false);
   type Comment = { author: string; text: string; ts: string };
@@ -137,12 +138,12 @@ export default function TxDetailsPage() {
   const arrow = tx.myRole === 'payer' ? 'You →' : 'You ←';
 
   return (
-    <div className="space-y-4 md:space-y-3 lg:space-y-2 pb-36">
+    <div className="space-y-4 md:space-y-3 lg:space-y-2 pb-[180px]">
       <div className="relative flex items-center gap-2">
         <button
           aria-label="Go back"
           className="inline-flex items-center justify-center h-9 w-9 rounded-full border hover:bg-gray-50"
-          onClick={() => router.back()}
+          onClick={() => router.push('/history')}
         >
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
@@ -165,103 +166,153 @@ export default function TxDetailsPage() {
           <div className="text-sm text-gray-600">Payment transfer amount</div>
           <div className="text-3xl font-bold">{tx.amount.toFixed(2)} <span className="text-xl align-top">Pi</span></div>
         </div>
-        {(tx.status === 'cancelled' || tx.status === 'disputed') && (
+        {tx.status === 'disputed' && (
           <div className="mt-3 text-xs rounded-md border p-2 bg-gray-50 text-gray-700">
-            {tx.status === 'cancelled' && 'This transaction was cancelled.'}
-            {tx.status === 'disputed' && 'This transaction is currently in dispute.'}
+            This transaction is currently in dispute.
           </div>
         )}
-      </div>
 
-      <details open>
-        <summary className="cursor-pointer select-none font-semibold inline-flex items-center gap-2 mt-2">
-          <span>EscrowPi Transaction Details</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </summary>
-        <div className="mt-3 md:mt-2 space-y-3 md:space-y-2 lg:space-y-1 text-sm max-h-[50dvh] overflow-auto">
-          
-          {/* UC1: Transaction Commentary */}
-          <div className="min-h-28" aria-label="Open all comments">
-            <div className="font-semibold mb-2 md:mb-1 text-center">Transaction Commentary</div>
-            <div
-              ref={previewContainerRef}
-              className={`rounded-lg border p-3 md:p-2 bg-white h-40 overflow-hidden cursor-pointer hover:bg-gray-50 flex flex-col justify-start`}
-              onClick={() => setShowComments(true)}
-            >
-              {comments.length === 0 ? (
-                <div className="text-xs text-gray-600">No comments yet.</div>
-              ) : (
-                <div
-                  ref={previewContentRef}
-                  className="space-y-1 text-xs will-change-transform pb-3"
-                  style={{ transform: `translateY(-${offsetPx}px)` }}
-                >
-                  {comments.map((c, idx) => (
-                    <div key={idx} className="py-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-[13px]">{c.author}</span>
-                        <span className="text-[11px] text-gray-500">{new Date(c.ts).toLocaleString()}</span>
-                      </div>
-                      <div className="whitespace-pre-wrap break-words text-[13px]">{c.text}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
+      {/* UC3: Cancel popup (payee at requested) */}
+      {tx.myRole === 'payee' && tx.status === 'pi_requested' && (
+        <Modal
+          open={showCancel}
+          onClose={() => setShowCancel(false)}
+          title={<div className="font-semibold text-center">Confirm you cancel the request to pay pi</div>}
+        >
+          <div className="space-y-2 text-sm">
+            <div className="text-center text-gray-700">This will cancel the current Pi transfer request.</div>
+            <div className="pt-2">
+              <button
+                className="w-full py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+                onClick={() => {
+                  const header: Comment = { author: myUsername, text: `${myUsername} has cancelled the pi transfer request.`, ts: new Date().toISOString() };
+                  const typed = newComment.trim();
+                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
+                  setTx({ ...tx, status: 'cancelled' });
+                  setShowCancel(false);
+                  setActionBanner('Action completed successfully');
+                  if (typed) setNewComment('');
+                  setTimeout(() => setActionBanner(''), 2000);
+                }}
+              >
+                Confirm Cancel
+              </button>
             </div>
           </div>
+        </Modal>
+      )}
+      </div>
 
-          {/* UC1: Add New Comment - remains visible, but disabled for terminal states */}
-          {(() => {
-            const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'disputed' || tx.status === 'completed';
-            return (
-              <div className="min-h-28">
-                <div className="font-semibold mb-2 md:mb-1 text-center">Add New Comment</div>
-                <textarea
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  rows={4}
-                  disabled={isTerminal}
-                  placeholder={isTerminal ? 'Adding new comments is closed for this transaction.' : 'Type your comment. You can include contact info or links.'}
-                  className={`w-full rounded border p-2 text-xs ${isTerminal ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`}
-                />
-                <div className="mt-2 flex justify-end">
-                  <button
-                    disabled={isTerminal || newComment.trim().length === 0}
-                    className={`px-3 py-2 rounded text-xs font-semibold ${!isTerminal && newComment.trim().length ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
-                    onClick={() => {
-                      const entry: Comment = { author: myUsername, text: newComment.trim(), ts: new Date().toISOString() };
-                      setComments((prev) => [...prev, entry]);
-                      setNewComment('');
-                    }}
-                  >
-                    Add Comment
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
+      <details className="group">
+        <summary className="cursor-pointer select-none font-semibold inline-flex items-center gap-2 mt-2">
+          <span>EscrowPi Transaction Details</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="transition-transform duration-200 group-open:rotate-90">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </summary>
+        <div className="mt-3 md:mt-2 text-sm">
+          {(() => { const b = deriveBreakdown(tx.amount); const refundNote = tx.myRole === 'payer' ? '(refunded to you at end)' : '(refunded to the payer at end)'; const getLabel = tx.myRole === 'payee' ? 'You get:' : 'Payee gets:'; return (
+            <div className="space-y-2 rounded-lg border border-black p-3">
+              <div className="flex justify-between"><span>{getLabel}</span><span>{fmt(b.base)} pi</span></div>
+              <div className="flex justify-between"><span>Transaction completion stake:</span><span>{fmt(b.completionStake)} pi</span></div>
+              <div className="text-[11px] text-gray-600">{refundNote}</div>
+              <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
+              <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+              <div className="flex justify-between font-semibold"><span>Total:</span><span>{fmt(b.total)} pi</span></div>
+            </div>
+          ); })()}
         </div>
       </details>
 
+      {/* Transaction Commentary (outside details) */}
+      <div className="mt-3 md:mt-2 space-y-3 md:space-y-2 lg:space-y-1 text-sm">
+        <div className="min-h-28" aria-label="Open all comments">
+          <div className="font-semibold mb-2 md:mb-1 text-center">Transaction Commentary</div>
+          <div
+            ref={previewContainerRef}
+            className={`rounded-lg border p-3 md:p-2 bg-white h-40 overflow-hidden cursor-pointer hover:bg-gray-50 flex flex-col justify-start`}
+            onClick={() => setShowComments(true)}
+          >
+            {comments.length === 0 ? (
+              <div className="text-xs text-gray-600">No comments yet.</div>
+            ) : (
+              <div
+                ref={previewContentRef}
+                className="space-y-1 text-xs will-change-transform pb-3"
+                style={{ transform: `translateY(-${offsetPx}px)` }}
+              >
+                {comments.map((c, idx) => (
+                  <div key={idx} className="py-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-[13px]">{c.author}</span>
+                      <span className="text-[11px] text-gray-500">{new Date(c.ts).toLocaleString()}</span>
+                    </div>
+                    <div className="whitespace-pre-wrap break-words text-[13px]">{c.text}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Add New Comment (outside details) - remains visible, but disabled for terminal states */}
+        {(() => {
+          const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'disputed' || tx.status === 'completed';
+          return (
+            <div className="min-h-28">
+              <div className="font-semibold mb-2 md:mb-1 text-center">Add New Comment</div>
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                rows={4}
+                disabled={isTerminal}
+                placeholder={isTerminal ? 'Adding new comments is closed for this transaction.' : 'Type your comment. You can include contact info or links.'}
+                className={`w-full rounded border p-2 text-xs ${isTerminal ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`}
+              />
+              <div className="mt-2 flex justify-end">
+                <button
+                  disabled={isTerminal || newComment.trim().length === 0}
+                  className={`px-3 py-2 rounded text-xs font-semibold ${!isTerminal && newComment.trim().length ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                  onClick={() => {
+                    const entry: Comment = { author: myUsername, text: newComment.trim(), ts: new Date().toISOString() };
+                    setComments((prev) => [...prev, entry]);
+                    setNewComment('');
+                  }}
+                >
+                  Add Comment
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Spacer to avoid overlap with fixed Action bar */}
+      <div className="h-[120px]" aria-hidden></div>
+
           {/* UC1/UC2: Action section (varies by status/role) - fixed to bottom */}
           <div
-            className="fixed inset-x-0 z-10 px-4"
+            className="fixed inset-x-0 z-10 px-4 bg-[var(--default-bg-color)]"
             style={{ bottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
           >
             <div className="w-full max-w-md mx-auto">
               <div className="font-semibold mb-2 text-center">Action</div>
               {/* Single Action shell used for ALL scenarios for consistency */}
-              <div className="w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] min-h-16">
+              <div className="w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] h-[72px] overflow-hidden">
                 {(() => {
                   const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'disputed' || tx.status === 'completed';
                   if (isTerminal) {
                     return (
-                      <div className="flex items-center justify-center text-center px-3 text-[13px] md:text-[14px] font-medium text-gray-800 h-full">
+                      <div className="flex items-center justify-center text-center px-3 text-[13px] md:text-[14px] font-medium text-gray-800 h-full leading-tight overflow-hidden">
                         {tx.status === 'declined' ? (
                           <div>
                             <div className="text-red-700">This transaction was declined</div>
+                            <div>No further actions required.</div>
+                          </div>
+                        ) : tx.status === 'cancelled' ? (
+                          <div>
+                            <div>This transaction was cancelled.</div>
                             <div>No further actions required.</div>
                           </div>
                         ) : (
@@ -279,12 +330,34 @@ export default function TxDetailsPage() {
                         >
                           Reject
                         </button>
-                        <div className="flex-1 text-center px-3 py-2 text-[13px] md:text-[14px] font-medium text-gray-800">Waiting for Payer to accept Payee request for pi transfer</div>
+                        <div className="flex-1 text-center px-3 text-[13px] md:text-[14px] font-medium text-gray-800">Waiting for Payer to accept Payee request for pi transfer</div>
                         <button
                           className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[#f0b37e] border border-[#d9b07a] hover:brightness-110 active:brightness-105 transition"
                           onClick={() => setShowAccept(true)}
                         >
                           Accept
+                        </button>
+                      </div>
+                    );
+                  }
+                  if (tx.myRole === 'payee' && tx.status === 'pi_requested') {
+                    // UC3: Payee can cancel the request; show center message like UC2
+                    return (
+                      <div className="flex items-center gap-2 h-full">
+                        <button
+                          className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[#f0b37e] border border-[#d9b07a] hover:brightness-110 active:brightness-105 transition"
+                          onClick={() => setShowCancel(true)}
+                        >
+                          Cancel
+                        </button>
+                        <div className="flex-1 text-center px-3 text-[13px] md:text-[14px] font-medium text-gray-800">
+                          Waiting for Payer to accept Payee request for pi transfer
+                        </div>
+                        <button
+                          className="px-4 h-12 rounded-full text-sm font-semibold bg-gray-200 text-gray-500 cursor-not-allowed"
+                          disabled
+                        >
+                          Payer?
                         </button>
                       </div>
                     );
