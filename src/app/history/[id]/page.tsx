@@ -53,6 +53,8 @@ export default function TxDetailsPage() {
   const [showAccept, setShowAccept] = useState<boolean>(false);
   const [showReject, setShowReject] = useState<boolean>(false);
   const [showCancel, setShowCancel] = useState<boolean>(false);
+  const [showFulfilled, setShowFulfilled] = useState<boolean>(false);
+  const [showDispute, setShowDispute] = useState<boolean>(false);
   const [actionBanner, setActionBanner] = useState<string>("");
   const [showComments, setShowComments] = useState<boolean>(false);
   type Comment = { author: string; text: string; ts: string };
@@ -166,11 +168,69 @@ export default function TxDetailsPage() {
           <div className="text-sm text-gray-600">Payment transfer amount</div>
           <div className="text-3xl font-bold">{tx.amount.toFixed(2)} <span className="text-xl align-top">Pi</span></div>
         </div>
-        {tx.status === 'disputed' && (
-          <div className="mt-3 text-xs rounded-md border p-2 bg-gray-50 text-gray-700">
-            This transaction is currently in dispute.
+        {/* Disputed banner removed from top card; message is shown in Action area for consistency */}
+
+      {/* UC8: Dispute popup (payee at fulfilled) */}
+      {tx.myRole === 'payee' && tx.status === 'fulfilled' && (
+        <Modal
+          open={showDispute}
+          onClose={() => setShowDispute(false)}
+          title={<div className="font-semibold text-center">Confirm you dispute the transaction</div>}
+        >
+          <div className="space-y-2 text-sm">
+            <div className="text-center text-gray-700">This will mark transaction status as disputed.</div>
+            <div className="pt-2">
+              <button
+                className="w-full py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+                onClick={() => {
+                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['disputed']}.`, ts: new Date().toISOString() };
+                  const typed = newComment.trim();
+                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
+                  setTx({ ...tx, status: 'disputed' });
+                  setShowDispute(false);
+                  setActionBanner('Action completed successfully');
+                  if (typed) setNewComment('');
+                  setTimeout(() => setActionBanner(''), 2000);
+                }}
+              >
+                Confirm
+              </button>
+            </div>
           </div>
-        )}
+        </Modal>
+      )}
+
+      {/* UC5: Fulfilled popup (payee at paid) */}
+      {tx.myRole === 'payee' && tx.status === 'pi_sent' && (
+        <Modal
+          open={showFulfilled}
+          onClose={() => setShowFulfilled(false)}
+          title={<div className="font-semibold text-center">Confirm you have fulfilled the purchase</div>}
+        >
+          <div className="space-y-2 text-sm">
+            <div className="text-center text-gray-700">This will mark transaction status as fulfilled.</div>
+            <div className="pt-2">
+              <button
+                className="w-full py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+                onClick={() => {
+                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['fulfilled']}.`, ts: new Date().toISOString() };
+                  const typed = newComment.trim();
+                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
+                  setTx({ ...tx, status: 'fulfilled' });
+                  setShowFulfilled(false);
+                  setActionBanner('Action completed successfully');
+                  if (typed) setNewComment('');
+                  setTimeout(() => setActionBanner(''), 2000);
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* UC3: Cancel popup (payee at requested) */}
       {tx.myRole === 'payee' && tx.status === 'pi_requested' && (
@@ -186,7 +246,7 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `${myUsername} has cancelled the pi transfer request.`, ts: new Date().toISOString() };
+                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['cancelled']}.`, ts: new Date().toISOString() };
                   const typed = newComment.trim();
                   setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
                   setTx({ ...tx, status: 'cancelled' });
@@ -315,6 +375,11 @@ export default function TxDetailsPage() {
                             <div>This transaction was cancelled.</div>
                             <div>No further actions required.</div>
                           </div>
+                        ) : tx.status === 'disputed' ? (
+                          <div>
+                            <div className="text-red-700">This transaction is marked as disputed.</div>
+                            <div>No further actions required.</div>
+                          </div>
                         ) : (
                           <div>No further actions required.</div>
                         )}
@@ -362,19 +427,44 @@ export default function TxDetailsPage() {
                       </div>
                     );
                   }
+                  // UC5: Payee at Paid (pi_sent): Comment + Fulfilled
+                  if (tx.myRole === 'payee' && tx.status === 'pi_sent') {
+                    return (
+                      <div className="flex items-center gap-2 h-full">
+                        <div className="flex-1 px-3 text-[13px] md:text-[14px] font-medium text-gray-800 text-left">
+                          Waiting for Payee fulfillment of the purchased item(s)
+                        </div>
+                        <button
+                          className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
+                          onClick={() => setShowFulfilled(true)}
+                        >
+                          Fulfilled
+                        </button>
+                      </div>
+                    );
+                  }
+                  // UC8: Payee at Fulfilled: message + Dispute (single-button layout)
+                  if (tx.myRole === 'payee' && tx.status === 'fulfilled') {
+                    return (
+                      <div className="flex items-center gap-2 h-full">
+                        <div className="flex-1 px-3 text-[13px] md:text-[14px] font-medium text-gray-800 text-left">
+                          Waiting for payer to confirm purchased items received OK
+                        </div>
+                        <button
+                          className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
+                          onClick={() => setShowDispute(true)}
+                        >
+                          Dispute
+                        </button>
+                      </div>
+                    );
+                  }
                   // Other action scenarios: keep left/right buttons inside the same shell
                   return (
                     <div className="flex items-center gap-2 h-full">
                       {tx.myRole === 'payee' ? (
                         <>
-                          <button
-                            disabled={tx.status !== 'pi_sent'}
-                            className={`px-4 h-12 rounded-full text-sm font-semibold ${tx.status === 'pi_sent' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
-                            onClick={() => setTx({ ...tx, status: 'fulfilled' })}
-                          >
-                            Mark Fulfilled
-                          </button>
-                          <div className="flex-1" />
+                          <div className="flex-1"/>
                         </>
                       ) : (
                         <>
@@ -382,7 +472,14 @@ export default function TxDetailsPage() {
                           <button
                             disabled={tx.status !== 'fulfilled'}
                             className={`px-4 h-12 rounded-full text-sm font-semibold ${tx.status === 'fulfilled' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
-                            onClick={() => setTx({ ...tx, status: 'completed' })}
+                            onClick={() => {
+                              if (tx.status !== 'fulfilled') return;
+                              const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['completed']}.`, ts: new Date().toISOString() };
+                              setComments((prev) => [...prev, header]);
+                              setTx({ ...tx, status: 'completed' });
+                              setActionBanner('Action completed successfully');
+                              setTimeout(() => setActionBanner(''), 2000);
+                            }}
                           >
                             Mark Complete
                           </button>
@@ -427,7 +524,7 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold bg-red-100 text-red-700 border border-red-200"
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `${myUsername} has rejected the pi transfer request.`, ts: new Date().toISOString() };
+                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['declined']}.`, ts: new Date().toISOString() };
                   const typed = newComment.trim();
                   setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
                   setTx({ ...tx, status: 'declined', needsPayerResponse: false });
@@ -468,7 +565,7 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `${myUsername} has accepted the pi transfer request.`, ts: new Date().toISOString() };
+                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['pi_sent']}.`, ts: new Date().toISOString() };
                   const typed = newComment.trim();
                   setComments((prev) => typed ? [...prev, header, { author: 'You', text: typed, ts: new Date().toISOString() }] : [...prev, header]);
                   setTx({ ...tx, status: 'pi_sent', needsPayerResponse: false });
