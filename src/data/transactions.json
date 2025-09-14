@@ -1,9 +1,9 @@
 [
-  { "id": "tx_pi_requested_payer", "direction": "receive", "myRole": "payer", "counterparty": "@merchantA", "amount": 74.61, "status": "pi_requested", "date": "2025-09-03T07:30:00Z", "notes": "Order F-714", "needsPayerResponse": true },
-  { "id": "tx_pi_requested_payee", "direction": "receive", "myRole": "payee", "counterparty": "@customer1", "amount": 22.0, "status": "pi_requested", "date": "2025-09-02T10:10:00Z", "notes": "Job J-101" },
+  { "id": "tx_requested_payer", "direction": "receive", "myRole": "payer", "counterparty": "@merchantA", "amount": 74.61, "status": "requested", "date": "2025-09-03T07:30:00Z", "notes": "Order F-714", "needsPayerResponse": true },
+  { "id": "tx_requested_payee", "direction": "receive", "myRole": "payee", "counterparty": "@customer1", "amount": 22.0, "status": "requested", "date": "2025-09-02T10:10:00Z", "notes": "Job J-101" },
 
-  { "id": "tx_pi_sent_payer", "direction": "send", "myRole": "payer", "counterparty": "@alice", "amount": 12.5, "status": "pi_sent", "date": "2025-09-01T12:15:00Z", "notes": "Invoice #A1001" },
-  { "id": "tx_pi_sent_payee", "direction": "receive", "myRole": "payee", "counterparty": "@buyer42", "amount": 3.99, "status": "pi_sent", "date": "2025-09-01T09:05:00Z", "notes": "Ticket T-42" },
+  { "id": "tx_paid_payer", "direction": "send", "myRole": "payer", "counterparty": "@alice", "amount": 12.5, "status": "paid", "date": "2025-09-01T12:15:00Z", "notes": "Invoice #A1001" },
+  { "id": "tx_paid_payee", "direction": "receive", "myRole": "payee", "counterparty": "@buyer42", "amount": 3.99, "status": "paid", "date": "2025-09-01T09:05:00Z", "notes": "Ticket T-42" },
 
   { "id": "tx_fulfilled_payer", "direction": "send", "myRole": "payer", "counterparty": "@vendorY", "amount": 7.2, "status": "fulfilled", "date": "2025-08-31T15:00:00Z", "notes": "Ref V-007" },
   { "id": "tx_fulfilled_payee", "direction": "receive", "myRole": "payee", "counterparty": "@vendorZ", "amount": 5.2, "status": "fulfilled", "date": "2025-08-28T09:00:00Z", "notes": "Service ticket #884" },

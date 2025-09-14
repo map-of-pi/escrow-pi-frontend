@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
 import transactions from '@/data/transactions.json';
 
-type TxStatus = 'pi_requested' | 'pi_sent' | 'cancelled' | 'declined' | 'disputed' | 'fulfilled' | 'completed';
+type TxStatus = 'requested' | 'paid' | 'cancelled' | 'declined' | 'disputed' | 'fulfilled' | 'completed';
 
 type Tx = {
   id: string;
@@ -19,8 +19,8 @@ type Tx = {
 };
 
 const statusLabel: Record<TxStatus, string> = {
-  pi_requested: 'Pi_requested',
-  pi_sent: 'Pi_sent',
+  requested: 'Requested',
+  paid: 'Paid',
   cancelled: 'Cancelled',
   declined: 'Declined',
   disputed: 'Disputed',
@@ -29,8 +29,8 @@ const statusLabel: Record<TxStatus, string> = {
 };
 
 const statusClasses: Record<TxStatus, string> = {
-  pi_requested: 'bg-amber-50 text-amber-800 border-amber-200',
-  pi_sent: 'bg-blue-50 text-blue-800 border-blue-200',
+  requested: 'bg-amber-50 text-amber-800 border-amber-200',
+  paid: 'bg-blue-50 text-blue-800 border-blue-200',
   cancelled: 'bg-gray-50 text-gray-700 border-gray-200',
   declined: 'bg-gray-50 text-gray-700 border-gray-200',
   disputed: 'bg-red-50 text-red-800 border-red-200',
@@ -49,12 +49,16 @@ export default function TxDetailsPage() {
   }, [id]);
 
   const [tx, setTx] = useState<Tx | undefined>(initial);
-  const [showPopup, setShowPopup] = useState<boolean>(!!(tx?.needsPayerResponse && tx.direction === 'receive' && tx.status === 'pi_requested'));
+  const [showPopup, setShowPopup] = useState<boolean>(!!(tx?.needsPayerResponse && tx.direction === 'receive' && tx.status === 'requested'));
   const [showAccept, setShowAccept] = useState<boolean>(false);
   const [showReject, setShowReject] = useState<boolean>(false);
   const [showCancel, setShowCancel] = useState<boolean>(false);
   const [showFulfilled, setShowFulfilled] = useState<boolean>(false);
   const [showDispute, setShowDispute] = useState<boolean>(false);
+  const [showReceived, setShowReceived] = useState<boolean>(false);
+  // UC9: dispute resolution modals
+  const [showSendProposal, setShowSendProposal] = useState<boolean>(false);
+  const [showAcceptProposal, setShowAcceptProposal] = useState<boolean>(false);
   const [actionBanner, setActionBanner] = useState<string>("");
   const [showComments, setShowComments] = useState<boolean>(false);
   type Comment = { author: string; text: string; ts: string };
@@ -71,6 +75,12 @@ export default function TxDetailsPage() {
   }, [tx, myUsername]);
   const [comments, setComments] = useState<Comment[]>(initialComments);
   const [newComment, setNewComment] = useState<string>("");
+
+  // UC9: Refund percentage state
+  const [refundPercent, setRefundPercent] = useState<number>(20);
+  const [refundPercentStr, setRefundPercentStr] = useState<string>('20');
+  const [lastProposedPercent, setLastProposedPercent] = useState<number | null>(null);
+  const [lastProposedBy, setLastProposedBy] = useState<'payer' | 'payee' | null>(null);
 
   // Commentary preview measurement using translateY to keep latest visible without cutting
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -95,6 +105,14 @@ export default function TxDetailsPage() {
       window.removeEventListener('resize', onResize);
     };
   }, [comments]);
+
+  // UC9: Keep Accept disabled until there is a counterparty proposal
+  useEffect(() => {
+    if (tx?.status !== 'disputed') {
+      setLastProposedPercent(null);
+      setLastProposedBy(null);
+    }
+  }, [tx?.status]);
 
   // Helpers to display the popup breakdown like on the mock
   const fmt = (n: number) => {
@@ -170,8 +188,8 @@ export default function TxDetailsPage() {
         </div>
         {/* Disputed banner removed from top card; message is shown in Action area for consistency */}
 
-      {/* UC8: Dispute popup (payee at fulfilled) */}
-      {tx.myRole === 'payee' && tx.status === 'fulfilled' && (
+        {/* UC8/UC6/UC7: Dispute popup (payee at fulfilled OR payer at paid/fulfilled) */}
+      {((tx.myRole === 'payee' && tx.status === 'fulfilled') || (tx.myRole === 'payer' && (tx.status === 'paid' || tx.status === 'fulfilled'))) && (
         <Modal
           open={showDispute}
           onClose={() => setShowDispute(false)}
@@ -201,8 +219,119 @@ export default function TxDetailsPage() {
         </Modal>
       )}
 
+      {/* UC9: Send Proposal popup (payer/payee at disputed) */}
+      {tx.status === 'disputed' && (
+        <>
+          <Modal
+            open={showSendProposal}
+            onClose={() => setShowSendProposal(false)}
+            title={<div className="font-semibold text-center">You propose dispute resolution refund {refundPercent}%</div>}
+          >
+            {(() => { const b = deriveBreakdown(tx.amount); const refund = (b.base * refundPercent) / 100; const payeeGets = b.base - refund; return (
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(refund)} pi</span></div>
+                <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(payeeGets)} pi</span></div>
+                <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
+                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
+                <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+                <div className="pt-2">
+                  <button
+                    className="w-full py-2 rounded-lg text-sm font-semibold"
+                    style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+                    onClick={() => {
+                      const header: Comment = { author: myUsername, text: `User ${myUsername} has proposed a dispute resolution refund of ${fmt(refundPercent)}%.`, ts: new Date().toISOString() };
+                      setComments((prev) => [...prev, header]);
+                      setLastProposedPercent(refundPercent);
+                      setLastProposedBy(tx.myRole);
+                      setShowSendProposal(false);
+                      setActionBanner('Action completed successfully');
+                      setTimeout(() => setActionBanner(''), 2000);
+                    }}
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            ); })()}
+          </Modal>
+
+          {/* Accept Proposal popup (payer/payee at disputed) */}
+          <Modal
+            open={showAcceptProposal}
+            onClose={() => setShowAcceptProposal(false)}
+            title={<div className="font-semibold text-center">You accept dispute resolution refund {lastProposedPercent ?? refundPercent}%</div>}
+          >
+            {(() => { const b = deriveBreakdown(tx.amount); const percent = (lastProposedPercent ?? refundPercent); const refund = (b.base * percent) / 100; const payeeGets = b.base - refund; return (
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(refund)} pi</span></div>
+                <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(payeeGets)} pi</span></div>
+                <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
+                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
+                <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+                <div className="pt-2">
+                  <button
+                    className="w-full py-2 rounded-lg text-sm font-semibold"
+                    style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+                    onClick={() => {
+                      const percent = (lastProposedPercent ?? refundPercent);
+                      const accepted: Comment = { author: myUsername, text: `User ${myUsername} accepted proposed dispute resolution refund of ${fmt(percent)}%.`, ts: new Date().toISOString() };
+                      const completed: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['completed']}.`, ts: new Date().toISOString() };
+                      setComments((prev) => [...prev, accepted, completed]);
+                      setTx({ ...tx, status: 'completed' });
+                      setShowAcceptProposal(false);
+                      setActionBanner('Action completed successfully');
+                      setTimeout(() => setActionBanner(''), 2000);
+                    }}
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            ); })()}
+          </Modal>
+        </>
+      )}
+
+      {/* UC7: Received popup (payer at fulfilled) */}
+      {tx.myRole === 'payer' && tx.status === 'fulfilled' && (
+        <Modal
+          open={showReceived}
+          onClose={() => setShowReceived(false)}
+          title={<div className="font-semibold text-center">Confirm purchased item(s) received and release payment</div>}
+        >
+          <div className="space-y-3 text-sm">
+            <div className="text-center text-gray-700">This will mark transaction status as {statusLabel['completed']}.</div>
+            {(() => { const b = deriveBreakdown(tx.amount); return (
+              <div className="space-y-2 rounded-lg border border-black p-3">
+                <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(b.base)} pi</span></div>
+                <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
+                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
+                <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+                <div className="flex justify-between font-semibold"><span>Total:</span><span>{fmt(b.total)} pi</span></div>
+              </div>
+            ); })()}
+            <div className="pt-2">
+              <button
+                className="w-full py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+                onClick={() => {
+                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['completed']}.`, ts: new Date().toISOString() };
+                  setComments((prev) => [...prev, header]);
+                  setTx({ ...tx, status: 'completed' });
+                  setShowReceived(false);
+                  setActionBanner('Action completed successfully');
+                  setTimeout(() => setActionBanner(''), 2000);
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* UC5: Fulfilled popup (payee at paid) */}
-      {tx.myRole === 'payee' && tx.status === 'pi_sent' && (
+      {tx.myRole === 'payee' && tx.status === 'paid' && (
         <Modal
           open={showFulfilled}
           onClose={() => setShowFulfilled(false)}
@@ -233,7 +362,7 @@ export default function TxDetailsPage() {
       )}
 
       {/* UC3: Cancel popup (payee at requested) */}
-      {tx.myRole === 'payee' && tx.status === 'pi_requested' && (
+      {tx.myRole === 'payee' && tx.status === 'requested' && (
         <Modal
           open={showCancel}
           onClose={() => setShowCancel(false)}
@@ -318,7 +447,8 @@ export default function TxDetailsPage() {
 
         {/* Add New Comment (outside details) - remains visible, but disabled for terminal states */}
         {(() => {
-          const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'disputed' || tx.status === 'completed';
+          // Disputed is not terminal for UC9
+          const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'completed';
           return (
             <div className="min-h-28">
               <div className="font-semibold mb-2 md:mb-1 text-center">Add New Comment</div>
@@ -359,9 +489,9 @@ export default function TxDetailsPage() {
             <div className="w-full max-w-md mx-auto">
               <div className="font-semibold mb-2 text-center">Action</div>
               {/* Single Action shell used for ALL scenarios for consistency */}
-              <div className="w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] h-[72px] overflow-hidden">
+              <div className="w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] h-[100px] overflow-hidden">
                 {(() => {
-                  const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'disputed' || tx.status === 'completed';
+                  const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'completed';
                   if (isTerminal) {
                     return (
                       <div className="flex items-center justify-center text-center px-3 text-[13px] md:text-[14px] font-medium text-gray-800 h-full leading-tight overflow-hidden">
@@ -380,13 +510,112 @@ export default function TxDetailsPage() {
                             <div className="text-red-700">This transaction is marked as disputed.</div>
                             <div>No further actions required.</div>
                           </div>
+                        ) : tx.status === 'completed' ? (
+                          <div>
+                            <div className="text-green-700">This transaction is marked as Completed.</div>
+                            <div>No further actions required.</div>
+                          </div>
                         ) : (
                           <div>No further actions required.</div>
                         )}
                       </div>
                     );
                   }
-                  if (tx.myRole === 'payer' && tx.status === 'pi_requested') {
+                  // UC9: Both roles at Disputed
+                  if (tx.status === 'disputed') {
+                    const matchesProposal = lastProposedPercent !== null && lastProposedBy !== tx.myRole && Math.abs(refundPercent - lastProposedPercent) < 1e-9;
+                    return (
+                      <div className="h-full flex flex-col">
+                        {/* Top strip: Dispute Centre */}
+                        <div className="text-center text-[12px] font-semibold rounded-md px-2 py-1 mb-1"
+                             style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}>
+                          Dispute Centre
+                        </div>
+                        {/* Content row */}
+                        <div className="flex-1 grid grid-cols-3 items-center gap-2">
+                          <div className="flex justify-start">
+                            <button
+                              disabled={matchesProposal}
+                              className={`px-3 h-12 rounded-full text-xs font-semibold ${!matchesProposal ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                              onClick={() => setShowSendProposal(true)}
+                            >
+                              <span className="flex flex-col leading-tight items-center">
+                                <span>Send</span>
+                                <span>Proposal</span>
+                              </span>
+                            </button>
+                          </div>
+                          <div className="flex flex-col items-center justify-center leading-tight">
+                            <div className="text-[11px] text-gray-800">Proposed refund</div>
+                            <div className="text-[10px] text-gray-600">(0-100%)</div>
+                            <div className="flex items-baseline justify-center mt-0.5">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-16 text-center bg-transparent border-0 outline-none text-[20px] font-bold"
+                                value={refundPercentStr}
+                                onChange={(e) => {
+                                  let s = e.target.value || '';
+                                  // allow digits and a single dot
+                                  s = s.replace(/[^0-9.]/g, '');
+                                  const parts = s.split('.');
+                                  if (parts.length > 2) {
+                                    s = parts[0] + '.' + parts.slice(1).join('');
+                                  }
+                                  // enforce max 2 decimal places while typing
+                                  const p2 = s.split('.');
+                                  if (p2.length === 2 && p2[1].length > 2) {
+                                    p2[1] = p2[1].slice(0, 2);
+                                    s = p2.join('.');
+                                  }
+                                  // remove leading zeros before a digit (keep single 0 or 0.xxx)
+                                  s = s.replace(/^0+(?=\d)/, '');
+                                  // clamp to 0..100
+                                  if (s !== '' && s !== '.') {
+                                    let n = Number(s);
+                                    if (!Number.isFinite(n)) n = 0;
+                                    if (n > 100) { n = 100; s = '100'; }
+                                    if (n < 0) { n = 0; s = '0'; }
+                                    setRefundPercent(n);
+                                  } else {
+                                    // empty or just dot -> treat as 0 while typing
+                                    setRefundPercent(0);
+                                  }
+                                  setRefundPercentStr(s);
+                                }}
+                                onBlur={() => {
+                                  // normalize to at most 2 decimals and strip trailing dot/zeros
+                                  let s = refundPercentStr;
+                                  if (s === '' || s === '.') { s = '0'; }
+                                  const n = Math.min(100, Math.max(0, Number(s)));
+                                  const fixed = Number.isFinite(n) ? n.toFixed(2) : '0.00';
+                                  // remove trailing zeros/decimal
+                                  let norm = fixed.replace(/0+$/,'').replace(/\.$/,'');
+                                  if (norm === '') norm = '0';
+                                  setRefundPercent(Number(norm));
+                                  setRefundPercentStr(norm);
+                                }}
+                              />
+                              <span className="ml-1 text-[16px] font-bold">%</span>
+                            </div>
+                          </div>
+                          <div className="flex justify-end">
+                            <button
+                              disabled={!matchesProposal}
+                              className={`px-3 h-12 rounded-full text-xs font-semibold ${matchesProposal ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                              onClick={() => setShowAcceptProposal(true)}
+                            >
+                              <span className="flex flex-col leading-tight items-center">
+                                <span>Accept</span>
+                                <span>Proposal</span>
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (tx.myRole === 'payer' && tx.status === 'requested') {
                     return (
                       <div className="flex items-center gap-2 h-full">
                         <button
@@ -405,7 +634,7 @@ export default function TxDetailsPage() {
                       </div>
                     );
                   }
-                  if (tx.myRole === 'payee' && tx.status === 'pi_requested') {
+                  if (tx.myRole === 'payee' && tx.status === 'requested') {
                     // UC3: Payee can cancel the request; show center message like UC2
                     return (
                       <div className="flex items-center gap-2 h-full">
@@ -427,8 +656,8 @@ export default function TxDetailsPage() {
                       </div>
                     );
                   }
-                  // UC5: Payee at Paid (pi_sent): Comment + Fulfilled
-                  if (tx.myRole === 'payee' && tx.status === 'pi_sent') {
+                  // UC5: Payee at Paid (paid): Comment + Fulfilled
+                  if (tx.myRole === 'payee' && tx.status === 'paid') {
                     return (
                       <div className="flex items-center gap-2 h-full">
                         <div className="flex-1 px-3 text-[13px] md:text-[14px] font-medium text-gray-800 text-left">
@@ -448,13 +677,51 @@ export default function TxDetailsPage() {
                     return (
                       <div className="flex items-center gap-2 h-full">
                         <div className="flex-1 px-3 text-[13px] md:text-[14px] font-medium text-gray-800 text-left">
-                          Waiting for payer to confirm purchased items received OK
+                          Waiting for Payer to confirm purchased items received OK
                         </div>
                         <button
                           className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
                           onClick={() => setShowDispute(true)}
                         >
                           Dispute
+                        </button>
+                      </div>
+                    );
+                  }
+                  // UC6: Payer at Paid (paid): message + Dispute (single-button layout)
+                  if (tx.myRole === 'payer' && tx.status === 'paid') {
+                    return (
+                      <div className="flex items-center gap-2 h-full">
+                        <div className="flex-1 px-3 text-[13px] md:text-[14px] font-medium text-gray-800 text-left">
+                          Waiting for payee to fulfill the purchased item(s)
+                        </div>
+                        <button
+                          className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
+                          onClick={() => setShowDispute(true)}
+                        >
+                          Dispute
+                        </button>
+                      </div>
+                    );
+                  }
+                  // UC7: Payer at Fulfilled: Dispute + Received
+                  if (tx.myRole === 'payer' && tx.status === 'fulfilled') {
+                    return (
+                      <div className="flex items-center gap-2 h-full">
+                        <button
+                          className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
+                          onClick={() => setShowDispute(true)}
+                        >
+                          Dispute
+                        </button>
+                        <div className="flex-1 px-3 text-[13px] md:text-[14px] font-medium text-gray-800 text-left">
+                          Waiting for Payer to confirm purchased items received OK
+                        </div>
+                        <button
+                          className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
+                          onClick={() => setShowReceived(true)}
+                        >
+                          Received
                         </button>
                       </div>
                     );
@@ -502,7 +769,7 @@ export default function TxDetailsPage() {
       )}
 
       {/* UC2: Reject popup (payer at requested) */}
-      {tx.myRole === 'payer' && tx.status === 'pi_requested' && (
+      {tx.myRole === 'payer' && tx.status === 'requested' && (
         <Modal
           open={showReject}
           onClose={() => setShowReject(false)}
@@ -542,7 +809,7 @@ export default function TxDetailsPage() {
       )}
 
       {/* UC2: Accept popup (payer at requested) */}
-      {tx.myRole === 'payer' && tx.status === 'pi_requested' && (
+      {tx.myRole === 'payer' && tx.status === 'requested' && (
         <Modal
           open={showAccept}
           onClose={() => setShowAccept(false)}
@@ -565,10 +832,10 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['pi_sent']}.`, ts: new Date().toISOString() };
+                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['paid']}.`, ts: new Date().toISOString() };
                   const typed = newComment.trim();
                   setComments((prev) => typed ? [...prev, header, { author: 'You', text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'pi_sent', needsPayerResponse: false });
+                  setTx({ ...tx, status: 'paid', needsPayerResponse: false });
                   setShowAccept(false);
                   setActionBanner('Action completed successfully');
                   if (typed) setNewComment('');
