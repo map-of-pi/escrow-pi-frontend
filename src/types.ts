@@ -5,7 +5,7 @@ export interface IUser {
 };
 
 export type PaymentDataType = {
-  amount: number;
+  amount: number | string;
   memo: string;
   metadata: {
     [key: string]: any;
