@@ -4,11 +4,11 @@ import { useRouter } from 'next/navigation';
 import transactions from '@/data/transactions.json';
 
 // Align statuses to the spec for the history cards
-// Display labels must be exactly one of: Pi_requested, Pi_sent, Cancelled, Declined, Disputed, Fulfilled, Completed, New
+// Display labels must be exactly one of: Requested, Paid, Cancelled, Declined, Disputed, Fulfilled, Completed, New
 type TxStatus =
-| 'new'
-  | 'pi_requested'
-  | 'pi_sent'
+  | 'new'
+  | 'requested'
+  | 'paid'
   | 'cancelled'
   | 'declined'
   | 'disputed'
@@ -29,8 +29,8 @@ type TxItem = {
 
 const statusClasses: Record<TxStatus, string> = {
   new: 'bg-slate-50 text-slate-700 border-slate-200',
-  pi_requested: 'bg-amber-50 text-amber-800 border-amber-200',
-  pi_sent: 'bg-blue-50 text-blue-800 border-blue-200',
+  requested: 'bg-amber-50 text-amber-800 border-amber-200',
+  paid: 'bg-blue-50 text-blue-800 border-blue-200',
   cancelled: 'bg-gray-50 text-gray-700 border-gray-200',
   declined: 'bg-gray-50 text-gray-700 border-gray-200',
   disputed: 'bg-red-50 text-red-800 border-red-200',
@@ -39,8 +39,8 @@ const statusClasses: Record<TxStatus, string> = {
 };
 
 const statusLabel: Record<TxStatus, string> = {
-  pi_requested: 'Pi_requested',
-  pi_sent: 'Pi_sent',
+  requested: 'Requested',
+  paid: 'Paid',
   cancelled: 'Cancelled',
   declined: 'Declined',
   disputed: 'Disputed',

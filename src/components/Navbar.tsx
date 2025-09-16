@@ -16,11 +16,17 @@ export default function Navbar() {
   // Initialize from pathname immediately to avoid a frame where non-home looks like home
   const [isHomePage, setIsHomePage] = useState(() => (pathname ?? '/') === '/');
   // Local readiness (controls header title + hamburger via CSS [data-ready])
-  const [ready, setReady] = useState(false);
+  // Initialize to ready for any non-home route to avoid a flash of "Loading ..." on route changes
+  const [ready, setReady] = useState(() => (pathname ?? '/') !== '/');
 
   useEffect(() => {
     setIsHomePage((pathname ?? '/') === '/');
   }, [pathname]);
+
+  // Detect transaction details and history list to alter back behavior
+  const isTxDetails = !!pathname && pathname.startsWith('/history/');
+  const isHistoryList = (pathname ?? '') === '/history';
+  const backHref = isTxDetails ? '/history' : isHistoryList ? '/?skipSplash=1' : '/?skipSplash=1';
 
   // Determine readiness without touching <body> attributes
   useEffect(() => {
@@ -42,15 +48,21 @@ export default function Navbar() {
     };
   }, [pathname]);
 
+  // Prefetch history route to make back navigation instant
+  useEffect(() => {
+    try { router.prefetch && router.prefetch('/history'); } catch {}
+  }, [router]);
+
   // No reading/writing of data-loading here. Home page controls it; CSS responds.
 
   const disabled = isHomePage;
 
+  const isNonHome = (pathname ?? '/') !== '/';
   return (
     <div
       className="w-full z-[500] fixed top-0 left-0 right-0"
       style={{ background: 'var(--default-primary-color)' }}
-      data-ready={ready ? 'true' : undefined}
+      data-ready={(isNonHome || ready) ? 'true' : undefined}
     >
       <div className="w-full h-[76.19px] px-[16px] py-[5px]">
         {/* Center title row */}
@@ -65,14 +77,33 @@ export default function Navbar() {
 
         {/* Nav row */}
         <div className="flex justify-between items-center">
-          <div className={`${styles.nav_item} ${disabled ? 'disabled' : ''}`}>
-            <Link href="/" onClick={(e) => { e.preventDefault(); if (!disabled) router.push('/?skipSplash=1'); }}>
-              <IoMdArrowBack size={26} className={`${disabled ? 'text-[var(--default-tertiary-color)]' : 'text-[var(--default-secondary-color)]'}`} />
-            </Link>
+          <div className={`${styles.nav_item}`}>
+            {isHomePage ? (
+              <span aria-disabled className="w-full h-full flex items-center justify-center cursor-not-allowed">
+                <IoMdArrowBack size={26} className={`text-[var(--default-tertiary-color)]`} />
+              </span>
+            ) : (
+              <Link
+                href={backHref}
+                aria-label="Back"
+                className="w-full h-full flex items-center justify-center"
+                onClick={(e) => {
+                  try {
+                    e.preventDefault();
+                    router.push(backHref);
+                  } catch {
+                    // As a last resort, hard navigate
+                    window.location.href = backHref;
+                  }
+                }}
+              >
+                <IoMdArrowBack size={26} className={`text-[var(--default-secondary-color)]`} />
+              </Link>
+            )}
           </div>
 
           <div className={`${styles.nav_item} ${disabled ? 'disabled' : ''}`}>
-            <Link href="/">
+            <Link href="/?skipSplash=1" aria-label="Go Home" className="w-full h-full flex items-center justify-center">
               <MdHome size={24} className={`${disabled ? 'text-[var(--default-tertiary-color)]' : 'text-[var(--default-secondary-color)]'}`} />
             </Link>
           </div>
@@ -84,7 +115,7 @@ export default function Navbar() {
           </div>
 
           <div className={`${styles.nav_item}`}>
-            <a href="https://escrowpi.zapier.app/" target="_blank" rel="noopener noreferrer">
+            <a href="https://mapofpi.zapier.app/" target="_blank" rel="noopener noreferrer">
               <FiHelpCircle size={24} className={'text-[var(--default-secondary-color)]'} />
             </a>
           </div>
