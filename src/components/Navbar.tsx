@@ -115,7 +115,7 @@ export default function Navbar() {
           </div>
 
           <div className={`${styles.nav_item}`}>
-            <a href="https://escrowpi.zapier.app/" target="_blank" rel="noopener noreferrer">
+            <a href="https://mapofpi.zapier.app/" target="_blank" rel="noopener noreferrer">
               <FiHelpCircle size={24} className={'text-[var(--default-secondary-color)]'} />
             </a>
           </div>

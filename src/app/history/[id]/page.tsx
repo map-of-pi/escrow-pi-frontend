@@ -414,10 +414,10 @@ export default function TxDetailsPage() {
         </div>
       </details>
 
-      {/* Transaction Commentary (outside details) */}
+      {/* Audit Log (outside details) */}
       <div className="mt-3 md:mt-2 space-y-3 md:space-y-2 lg:space-y-1 text-sm">
         <div className="min-h-28" aria-label="Open all comments">
-          <div className="font-semibold mb-2 md:mb-1 text-center">Transaction Commentary</div>
+          <div className="font-semibold mb-2 md:mb-1 text-center">Audit Log</div>
           <div
             ref={previewContainerRef}
             className={`rounded-lg border p-3 md:p-2 bg-white h-40 overflow-hidden cursor-pointer hover:bg-gray-50 flex flex-col justify-start`}
@@ -488,8 +488,8 @@ export default function TxDetailsPage() {
           >
             <div className="w-full max-w-md mx-auto">
               <div className="font-semibold mb-2 text-center">Action</div>
-              {/* Single Action shell used for ALL scenarios for consistency */}
-              <div className="w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] h-[100px] overflow-hidden">
+              {/* Single Action shell; height depends on status (larger for disputed only) */}
+              <div className={`w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] ${tx.status === 'disputed' ? 'h-[100px]' : 'h-[72px]'} overflow-hidden`}>
                 {(() => {
                   const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'completed';
                   if (isTerminal) {
@@ -635,23 +635,17 @@ export default function TxDetailsPage() {
                     );
                   }
                   if (tx.myRole === 'payee' && tx.status === 'requested') {
-                    // UC3: Payee can cancel the request; show center message like UC2
+                    // UC3: Single action; keep the only button to the right
                     return (
                       <div className="flex items-center gap-2 h-full">
+                        <div className="flex-1 px-3 text-[13px] md:text-[14px] font-medium text-gray-800 text-left">
+                          Waiting for Payer to accept Payee request for pi transfer
+                        </div>
                         <button
                           className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[#f0b37e] border border-[#d9b07a] hover:brightness-110 active:brightness-105 transition"
                           onClick={() => setShowCancel(true)}
                         >
                           Cancel
-                        </button>
-                        <div className="flex-1 text-center px-3 text-[13px] md:text-[14px] font-medium text-gray-800">
-                          Waiting for Payer to accept Payee request for pi transfer
-                        </div>
-                        <button
-                          className="px-4 h-12 rounded-full text-sm font-semibold bg-gray-200 text-gray-500 cursor-not-allowed"
-                          disabled
-                        >
-                          Payer?
                         </button>
                       </div>
                     );
@@ -854,7 +848,7 @@ export default function TxDetailsPage() {
         <Modal
           open={showComments}
           onClose={() => setShowComments(false)}
-          title={<div className="font-semibold">Transaction Commentary</div>}
+          title={<div className="font-semibold">Audit Log</div>}
           fullScreen
         >
           <div className="space-y-2 text-sm overflow-auto pr-1">
