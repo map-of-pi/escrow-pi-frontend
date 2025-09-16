@@ -1,8 +1,11 @@
 "use client";
-import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState, useContext } from 'react';
 import Image from 'next/image';
 import Modal from '@/components/Modal';
 import { toast } from 'react-toastify';
+import { AppContext } from '@/context/AppContextProvider';
+import { payWithPi } from '@/config/payment';
+import { PaymentDataType } from '@/types';
 
 function Splash() {
   return (
@@ -14,6 +17,7 @@ function Splash() {
 
 export default function HomePage() {
   // Always start as loading on server and first client render to avoid hydration mismatch
+  const { currentUser, autoLoginUser, setIsSaveLoading } = useContext(AppContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [counterparty, setCounterparty] = useState('');
   const [details, setDetails] = useState('');
@@ -85,12 +89,16 @@ export default function HomePage() {
     return '28px';
   }, [amountInput]);
 
-  const handleConfirm = (type: 'send' | 'request') => {
-    // TODO: Integrate with backend to create EscrowPi transaction
-    toast.info(`Demo: ${type === 'send' ? 'Sending' : 'Requesting'} ${fees.amt || 0} Pi via EscrowPi (backend pending)`);
+  const reset = () => {
     setShowSend(false);
     setShowRequest(false);
     setModalAmount('');
+  }
+
+  const handleConfirm = (type: 'send' | 'request') => {
+    // TODO: Integrate with backend to create EscrowPi transaction
+    toast.info(`Demo: ${type === 'send' ? 'Sending' : 'Requesting'} ${fees.amt || 0} Pi via EscrowPi (backend pending)`);
+    reset();
   };
 
   // Validate inputs and open the appropriate modal
@@ -117,7 +125,41 @@ export default function HomePage() {
     else setShowRequest(true);
   };
 
-  if (loading) return <Splash />;
+   const onPaymentComplete = async (data:any) => {
+    setIsSaveLoading(false);  
+    toast.success("Payment successfull")
+    reset();
+  }
+  
+  const onPaymentError = (error: Error) => {
+    toast.error('Payment error');
+    setIsSaveLoading(false);
+  }
+  
+  const handleSend = async () => {
+    if (!currentUser?.pi_uid) {
+      toast.error('SCREEN.MEMBERSHIP.VALIDATION.USER_NOT_LOGGED_IN_PAYMENT_MESSAGE')
+      return 
+    }
+    setIsSaveLoading(true)
+  
+    const paymentData: PaymentDataType = {
+      amount: modalAmount,
+      memo: `Escrow payment to ${counterparty}`,
+      metadata: { 
+        rceiver_username: counterparty,
+        details: details,
+        type: 'send_pi'
+      },        
+    };
+    await payWithPi(paymentData, onPaymentComplete, onPaymentError);
+  } 
+
+
+  if (!currentUser) {
+    autoLoginUser()
+    return <Splash />;
+  }
 
   return (
     <div className="space-y-6 px-4">
@@ -251,7 +293,7 @@ export default function HomePage() {
       <Modal
         open={showSend}
         onClose={() => setShowSend(false)}
-        onConfirm={() => handleConfirm('send')}
+        onConfirm={() => handleSend()}
         confirmText="Confirm Send"
         title={(
           <div className="space-y-2">
