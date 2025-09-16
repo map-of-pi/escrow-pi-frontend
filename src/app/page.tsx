@@ -17,7 +17,7 @@ function Splash() {
 
 export default function HomePage() {
   // Always start as loading on server and first client render to avoid hydration mismatch
-  const { currentUser, autoLoginUser, setIsSaveLoading } = useContext(AppContext);
+  const { currentUser, setIsSaveLoading, isSigningInUser } = useContext(AppContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [counterparty, setCounterparty] = useState('');
   const [details, setDetails] = useState('');
@@ -153,15 +153,12 @@ export default function HomePage() {
       },        
     };
     await payWithPi(paymentData, onPaymentComplete, onPaymentError);
-  } 
-
-
-  if (!currentUser) {
-    autoLoginUser()
-    return <Splash />;
   }
 
   return (
+    <>
+    { isSigningInUser || !currentUser ? 
+    <Splash /> : 
     <div className="space-y-6 px-4">
       <div className="max-w-md mx-auto flex flex-col min-h-[calc(100vh-140px)]">
         <label className="block text-lg font-black text-gray-900 text-center">Payer/Payee Pioneer Name</label>
@@ -352,6 +349,7 @@ export default function HomePage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </div> }
+    </>
   );
 }
