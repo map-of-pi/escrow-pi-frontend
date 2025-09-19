@@ -103,13 +103,18 @@ export default function Navbar() {
           </div>
 
           <div className={`${styles.nav_item} ${disabled ? 'disabled' : ''}`}>
-            <Link href="/?skipSplash=1" aria-label="Go Home" className="w-full h-full flex items-center justify-center">
+            <Link
+              href="/?skipSplash=1"
+              aria-label="Go Home"
+              className="w-full h-full flex items-center justify-center"
+              onClick={(e) => { e.preventDefault(); if (!disabled) router.push('/?skipSplash=1'); }}
+            >
               <MdHome size={24} className={`${disabled ? 'text-[var(--default-tertiary-color)]' : 'text-[var(--default-secondary-color)]'}`} />
             </Link>
           </div>
 
           <div className={`${styles.nav_item} disabled`}>
-            <Link href="/">
+            <Link href="/?skipSplash=1" aria-label="Home" onClick={(e) => { e.preventDefault(); if (!disabled) router.push('/?skipSplash=1'); }}>
               <Image src="/escrow-pi-logo.png" alt="EscrowPi" width={34} height={34} />
             </Link>
           </div>
