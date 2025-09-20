@@ -161,7 +161,7 @@ export default function HomePage() {
     setIsSaveLoading(true)
   
     const paymentData: PaymentDataType = {
-      amount: modalAmount,
+      amount: fees.total,
       memo: `Escrow payment to ${counterparty}`,
       metadata: { 
         rceiver_username: counterparty,
@@ -336,7 +336,7 @@ export default function HomePage() {
         <Modal
           open={showSend}
           onClose={() => setShowSend(false)}
-          onConfirm={() => handleConfirm('send')}
+          onConfirm={() => handleSend()}
           confirmText="Confirm Send"
           title={(
             <div className="space-y-2">
