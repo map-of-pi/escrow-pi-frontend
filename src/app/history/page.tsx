@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import transactions from '@/data/transactions.json';
 
 // Align statuses to the spec for the history cards
-// Display labels must be exactly one of: Requested, Paid, Cancelled, Declined, Disputed, Fulfilled, Completed, New
+// Display labels must be exactly one of: Requested, Paid, Cancelled, Declined, Disputed, Fulfilled, Released, New
 type TxStatus =
   | 'new'
   | 'requested'
@@ -13,7 +13,7 @@ type TxStatus =
   | 'declined'
   | 'disputed'
   | 'fulfilled'
-  | 'completed';
+  | 'released';
 type Direction = 'send' | 'receive';
 
 type TxItem = {
@@ -35,7 +35,7 @@ const statusClasses: Record<TxStatus, string> = {
   declined: 'bg-gray-50 text-gray-700 border-gray-200',
   disputed: 'bg-red-50 text-red-800 border-red-200',
   fulfilled: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-  completed: 'bg-green-50 text-green-800 border-green-200',
+  released: 'bg-green-50 text-green-800 border-green-200',
 };
 
 const statusLabel: Record<TxStatus, string> = {
@@ -45,7 +45,7 @@ const statusLabel: Record<TxStatus, string> = {
   declined: 'Declined',
   disputed: 'Disputed',
   fulfilled: 'Fulfilled',
-  completed: 'Completed',
+  released: 'Released',
   new: 'New',
 };
 

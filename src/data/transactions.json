@@ -11,8 +11,8 @@
   { "id": "tx_disputed_payer", "direction": "send", "myRole": "payer", "counterparty": "@shopY", "amount": 2.75, "status": "disputed", "date": "2025-08-27T18:20:00Z", "auditLog": "Case D-123" },
   { "id": "tx_disputed_payee", "direction": "receive", "myRole": "payee", "counterparty": "@clientQ", "amount": 9.5, "status": "disputed", "date": "2025-08-26T13:40:00Z", "auditLog": "Case D-124" },
 
-  { "id": "tx_completed_payer", "direction": "send", "myRole": "payer", "counterparty": "@bob", "amount": 3, "status": "completed", "date": "2025-08-24T11:05:00Z", "auditLog": "Ref B-339" },
-  { "id": "tx_completed_payee", "direction": "receive", "myRole": "payee", "counterparty": "@eve", "amount": 1.25, "status": "completed", "date": "2025-08-23T16:20:00Z", "auditLog": "Order E-12" },
+  { "id": "tx_released_payer", "direction": "send", "myRole": "payer", "counterparty": "@bob", "amount": 3, "status": "released", "date": "2025-08-24T11:05:00Z", "auditLog": "Ref B-339" },
+  { "id": "tx_released_payee", "direction": "receive", "myRole": "payee", "counterparty": "@eve", "amount": 1.25, "status": "released", "date": "2025-08-23T16:20:00Z", "auditLog": "Order E-12" },
 
   { "id": "tx_cancelled_payer", "direction": "send", "myRole": "payer", "counterparty": "@charlie", "amount": 1.5, "status": "cancelled", "date": "2025-08-20T09:10:00Z" },
   { "id": "tx_cancelled_payee", "direction": "receive", "myRole": "payee", "counterparty": "@zoe", "amount": 8.0, "status": "cancelled", "date": "2025-08-19T10:30:00Z", "auditLog": "Cancelled by payer" },

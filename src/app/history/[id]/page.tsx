@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
 import transactions from '@/data/transactions.json';
 
-type TxStatus = 'requested' | 'paid' | 'cancelled' | 'declined' | 'disputed' | 'fulfilled' | 'completed';
+type TxStatus = 'requested' | 'paid' | 'cancelled' | 'declined' | 'disputed' | 'fulfilled' | 'released';
 
 type Tx = {
   id: string;
@@ -25,7 +25,7 @@ const statusLabel: Record<TxStatus, string> = {
   declined: 'Declined',
   disputed: 'Disputed',
   fulfilled: 'Fulfilled',
-  completed: 'Completed',
+  released: 'Released',
 };
 
 const statusClasses: Record<TxStatus, string> = {
@@ -35,7 +35,7 @@ const statusClasses: Record<TxStatus, string> = {
   declined: 'bg-gray-50 text-gray-700 border-gray-200',
   disputed: 'bg-red-50 text-red-800 border-red-200',
   fulfilled: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-  completed: 'bg-green-50 text-green-800 border-green-200',
+  released: 'bg-green-50 text-green-800 border-green-200',
 };
 
 export default function TxDetailsPage() {
@@ -314,9 +314,9 @@ export default function TxDetailsPage() {
                     onClick={() => {
                       const percent = (lastProposedPercent ?? refundPercent);
                       const accepted: Comment = { author: myUsername, text: `User ${myUsername} accepted proposed dispute resolution refund of ${fmt(percent)}%.`, ts: new Date().toISOString() };
-                      const completed: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['completed']}.`, ts: new Date().toISOString() };
-                      setComments((prev) => [...prev, accepted, completed]);
-                      setTx({ ...tx, status: 'completed' });
+                      const released: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
+                      setComments((prev) => [...prev, accepted, released]);
+                      setTx({ ...tx, status: 'released' });
                       setShowAcceptProposal(false);
                       setActionBanner('Action completed successfully');
                       setTimeout(() => setActionBanner(''), 2000);
@@ -339,7 +339,7 @@ export default function TxDetailsPage() {
           title={<div className="font-semibold text-center">Confirm purchased item(s) received and release payment</div>}
         >
           <div className="space-y-3 text-sm">
-            <div className="text-center text-gray-700">This will mark transaction status as {statusLabel['completed']}.</div>
+            <div className="text-center text-gray-700">This will mark transaction status as {statusLabel['released']}.</div>
             {(() => { const b = deriveBreakdown(tx.amount); return (
               <div className="space-y-2 rounded-lg border border-black p-3">
                 <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(b.base)} pi</span></div>
@@ -354,9 +354,9 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['completed']}.`, ts: new Date().toISOString() };
+                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
                   setComments((prev) => [...prev, header]);
-                  setTx({ ...tx, status: 'completed' });
+                  setTx({ ...tx, status: 'released' });
                   setShowReceived(false);
                   setActionBanner('Action completed successfully');
                   setTimeout(() => setActionBanner(''), 2000);
@@ -487,7 +487,7 @@ export default function TxDetailsPage() {
         {/* Add New Comment (outside details) - remains visible, but disabled for terminal states */}
         {(() => {
           // Disputed is not terminal for UC9
-          const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'completed';
+          const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'released';
           return (
             <div className="min-h-28">
               <div className="font-semibold mb-2 md:mb-1 text-center">Add New Comment</div>
@@ -530,7 +530,7 @@ export default function TxDetailsPage() {
               {/* Single Action shell; height depends on status (larger for disputed only) */}
               <div className={`w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] ${tx.status === 'disputed' ? 'h-[100px]' : 'h-[72px]'} overflow-hidden`}>
                 {(() => {
-                  const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'completed';
+                  const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'released';
                   if (isTerminal) {
                     return (
                       <div className="flex items-center justify-center text-center px-3 text-[13px] md:text-[14px] font-medium text-gray-800 h-full leading-tight overflow-hidden">
@@ -549,9 +549,9 @@ export default function TxDetailsPage() {
                             <div className="text-red-700">This transaction is marked as disputed.</div>
                             <div>No further actions required.</div>
                           </div>
-                        ) : tx.status === 'completed' ? (
+                        ) : tx.status === 'released' ? (
                           <div>
-                            <div className="text-green-700">This transaction is marked as Completed.</div>
+                            <div className="text-green-700">This transaction is marked as Released.</div>
                             <div>No further actions required.</div>
                           </div>
                         ) : (
@@ -774,14 +774,14 @@ export default function TxDetailsPage() {
                             className={`px-4 h-12 rounded-full text-sm font-semibold ${tx.status === 'fulfilled' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                             onClick={() => {
                               if (tx.status !== 'fulfilled') return;
-                              const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['completed']}.`, ts: new Date().toISOString() };
+                              const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
                               setComments((prev) => [...prev, header]);
-                              setTx({ ...tx, status: 'completed' });
+                              setTx({ ...tx, status: 'released' });
                               setActionBanner('Action completed successfully');
                               setTimeout(() => setActionBanner(''), 2000);
                             }}
                           >
-                            Mark Complete
+                            Mark Released
                           </button>
                         </>
                       )}
