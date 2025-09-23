@@ -14,7 +14,7 @@ type Tx = {
   amount: number;
   status: TxStatus;
   date: string;
-  notes?: string;
+  auditLog?: string;
   needsPayerResponse?: boolean; // show popup when true and this is a receive where I am payer
 };
 
@@ -71,7 +71,7 @@ export default function TxDetailsPage() {
   const initialComments: Comment[] = useMemo(() => {
     if (!tx) return [];
     const author = tx.myRole === 'payer' ? tx.counterparty : myUsername;
-    return tx.notes ? [{ author, text: tx.notes, ts: tx.date }] : [];
+    return tx.auditLog ? [{ author, text: tx.auditLog, ts: tx.date }] : [];
   }, [tx, myUsername]);
   const [comments, setComments] = useState<Comment[]>(initialComments);
   const [newComment, setNewComment] = useState<string>("");
@@ -188,8 +188,8 @@ export default function TxDetailsPage() {
         </div>
         {/* Disputed banner removed from top card; message is shown in Action area for consistency */}
 
-        {/* UC8/UC6/UC7: Dispute popup (payee at fulfilled OR payer at paid/fulfilled) */}
-      {((tx.myRole === 'payee' && tx.status === 'fulfilled') || (tx.myRole === 'payer' && (tx.status === 'paid' || tx.status === 'fulfilled'))) && (
+        {/* UC8/UC7: Dispute popup (payee at fulfilled OR payer at fulfilled). UC6a removes Dispute for payer at paid. */}
+      {((tx.myRole === 'payee' && tx.status === 'fulfilled') || (tx.myRole === 'payer' && tx.status === 'fulfilled')) && (
         <Modal
           open={showDispute}
           onClose={() => setShowDispute(false)}
@@ -207,6 +207,45 @@ export default function TxDetailsPage() {
                   setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
                   setTx({ ...tx, status: 'disputed' });
                   setShowDispute(false);
+                  setActionBanner('Action completed successfully');
+                  if (typed) setNewComment('');
+                  setTimeout(() => setActionBanner(''), 2000);
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* UC6a: Cancel popup (payer at paid) */}
+      {tx.myRole === 'payer' && tx.status === 'paid' && (
+        <Modal
+          open={showCancel}
+          onClose={() => setShowCancel(false)}
+          title={<div className="font-semibold text-center">Confirm cancel transaction and refund payment {fmt(deriveBreakdown(tx.amount).total)} pi</div>}
+        >
+          <div className="space-y-3 text-sm">
+            {(() => { const b = deriveBreakdown(tx.amount); return (
+              <div className="space-y-2 rounded-lg p-3">
+                <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(b.base)} pi</span></div>
+                <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
+                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
+                <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+              </div>
+            ); })()}
+            <div className="pt-2">
+              <button
+                className="w-full py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+                onClick={() => {
+                  const ts = new Date().toISOString();
+                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['cancelled']}.`, ts };
+                  const typed = newComment.trim();
+                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts }] : [...prev, header]);
+                  setTx({ ...tx, status: 'cancelled' });
+                  setShowCancel(false);
                   setActionBanner('Action completed successfully');
                   if (typed) setNewComment('');
                   setTimeout(() => setActionBanner(''), 2000);
@@ -682,7 +721,7 @@ export default function TxDetailsPage() {
                       </div>
                     );
                   }
-                  // UC6: Payer at Paid (paid): message + Dispute (single-button layout)
+                  // UC6a: Payer at Paid (paid): message + Cancel (single-button layout)
                   if (tx.myRole === 'payer' && tx.status === 'paid') {
                     return (
                       <div className="flex items-center gap-2 h-full">
@@ -691,9 +730,9 @@ export default function TxDetailsPage() {
                         </div>
                         <button
                           className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
-                          onClick={() => setShowDispute(true)}
+                          onClick={() => setShowCancel(true)}
                         >
-                          Dispute
+                          Cancel
                         </button>
                       </div>
                     );
@@ -709,13 +748,13 @@ export default function TxDetailsPage() {
                           Dispute
                         </button>
                         <div className="flex-1 px-3 text-[13px] md:text-[14px] font-medium text-gray-800 text-left">
-                          Waiting for Payer to confirm purchased items received OK
+                          Waiting for Payer to verify purchased items received OK
                         </div>
                         <button
                           className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
                           onClick={() => setShowReceived(true)}
                         >
-                          Received
+                          Verified
                         </button>
                       </div>
                     );
