@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
 import transactions from '@/data/transactions.json';
+import { toast } from 'react-toastify';
 
 type TxStatus = 'requested' | 'paid' | 'cancelled' | 'declined' | 'disputed' | 'fulfilled' | 'released';
 
@@ -59,7 +60,7 @@ export default function TxDetailsPage() {
   // UC9: dispute resolution modals
   const [showSendProposal, setShowSendProposal] = useState<boolean>(false);
   const [showAcceptProposal, setShowAcceptProposal] = useState<boolean>(false);
-  const [actionBanner, setActionBanner] = useState<string>("");
+  // Success notifications are shown via toast.info
   const [showComments, setShowComments] = useState<boolean>(false);
   type Comment = { author: string; text: string; ts: string };
   // Prefer user-provided handle stored in localStorage. Fallback to '@you'.
@@ -207,9 +208,8 @@ export default function TxDetailsPage() {
                   setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
                   setTx({ ...tx, status: 'disputed' });
                   setShowDispute(false);
-                  setActionBanner('Action completed successfully');
+                  toast.info('Action completed successfully');
                   if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
                 }}
               >
                 Confirm
@@ -246,9 +246,8 @@ export default function TxDetailsPage() {
                   setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts }] : [...prev, header]);
                   setTx({ ...tx, status: 'cancelled' });
                   setShowCancel(false);
-                  setActionBanner('Action completed successfully');
+                  toast.info('Action completed successfully');
                   if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
                 }}
               >
                 Confirm
@@ -283,8 +282,7 @@ export default function TxDetailsPage() {
                       setLastProposedPercent(refundPercent);
                       setLastProposedBy(tx.myRole);
                       setShowSendProposal(false);
-                      setActionBanner('Action completed successfully');
-                      setTimeout(() => setActionBanner(''), 2000);
+                      toast.info('Action completed successfully');
                     }}
                   >
                     Confirm
@@ -318,8 +316,7 @@ export default function TxDetailsPage() {
                       setComments((prev) => [...prev, accepted, released]);
                       setTx({ ...tx, status: 'released' });
                       setShowAcceptProposal(false);
-                      setActionBanner('Action completed successfully');
-                      setTimeout(() => setActionBanner(''), 2000);
+                      toast.info('Action completed successfully');
                     }}
                   >
                     Confirm
@@ -358,8 +355,7 @@ export default function TxDetailsPage() {
                   setComments((prev) => [...prev, header]);
                   setTx({ ...tx, status: 'released' });
                   setShowReceived(false);
-                  setActionBanner('Action completed successfully');
-                  setTimeout(() => setActionBanner(''), 2000);
+                  toast.info('Action completed successfully');
                 }}
               >
                 Confirm
@@ -388,9 +384,8 @@ export default function TxDetailsPage() {
                   setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
                   setTx({ ...tx, status: 'fulfilled' });
                   setShowFulfilled(false);
-                  setActionBanner('Action completed successfully');
+                  toast.info('Action completed successfully');
                   if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
                 }}
               >
                 Confirm
@@ -419,9 +414,8 @@ export default function TxDetailsPage() {
                   setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
                   setTx({ ...tx, status: 'cancelled' });
                   setShowCancel(false);
-                  setActionBanner('Action completed successfully');
+                  toast.info('Action completed successfully');
                   if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
                 }}
               >
                 Confirm Cancel
@@ -777,8 +771,7 @@ export default function TxDetailsPage() {
                               const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
                               setComments((prev) => [...prev, header]);
                               setTx({ ...tx, status: 'released' });
-                              setActionBanner('Action completed successfully');
-                              setTimeout(() => setActionBanner(''), 2000);
+                              toast.info('Action completed successfully');
                             }}
                           >
                             Mark Released
@@ -792,14 +785,7 @@ export default function TxDetailsPage() {
             </div>
           </div>
 
-      {/* UC2: Success banner */}
-      {actionBanner && (
-        <div className="fixed top-[90px] left-0 right-0 z-40 px-4">
-          <div className="max-w-md mx-auto rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-2 text-sm text-center">
-            {actionBanner}
-          </div>
-        </div>
-      )}
+      {/* Success messages are shown as toast.info notifications. */}
 
       {/* UC2: Reject popup (payer at requested) */}
       {tx.myRole === 'payer' && tx.status === 'requested' && (
@@ -829,9 +815,8 @@ export default function TxDetailsPage() {
                   setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
                   setTx({ ...tx, status: 'declined', needsPayerResponse: false });
                   setShowReject(false);
-                  setActionBanner('Action completed successfully');
+                  toast.info('Action completed successfully');
                   if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
                 }}
               >
                 Confirm Reject
@@ -870,9 +855,8 @@ export default function TxDetailsPage() {
                   setComments((prev) => typed ? [...prev, header, { author: 'You', text: typed, ts: new Date().toISOString() }] : [...prev, header]);
                   setTx({ ...tx, status: 'paid', needsPayerResponse: false });
                   setShowAccept(false);
-                  setActionBanner('Action completed successfully');
+                  toast.info('Action completed successfully');
                   if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
                 }}
               >
                 Confirm Accept
