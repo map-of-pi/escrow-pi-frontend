@@ -3,7 +3,7 @@ import { INotification, NotificationType } from '@/types';
 
 let MOCK_CACHE: NotificationType[] | null = null;
 
-const useMock = () => process.env.NEXT_PUBLIC_USE_MOCK_NOTIFICATIONS === 'true';
+const isMockEnabled = () => process.env.NEXT_PUBLIC_USE_MOCK_NOTIFICATIONS === 'true';
 
 async function loadMock(): Promise<NotificationType[]> {
   if (MOCK_CACHE) return MOCK_CACHE;
@@ -19,7 +19,7 @@ export const getNotifications = async (
   { pi_uid, skip, limit, status }:
   { pi_uid: string, skip: number, limit: number, status?: 'cleared' | 'uncleared' }
 ) => {
-  if (useMock()) {
+  if (isMockEnabled()) {
     const all = await loadMock();
     let filtered = all.filter(n => n.pi_uid === pi_uid);
     if (status === 'cleared') filtered = filtered.filter(n => n.is_cleared === true);
@@ -41,7 +41,7 @@ export const getNotifications = async (
 };
 
 export const buildNotification = async (data: INotification) => {
-  if (useMock()) {
+  if (isMockEnabled()) {
     // Simulate creating a new notification for demo purposes
     const all = await loadMock();
     const now = new Date().toISOString();
@@ -63,7 +63,7 @@ export const buildNotification = async (data: INotification) => {
 };
 
 export const updateNotification = async (notification_id: string) => {
-  if (useMock()) {
+  if (isMockEnabled()) {
     const all = await loadMock();
     const idx = all.findIndex(n => n._id === notification_id);
     if (idx !== -1) {
