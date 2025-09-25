@@ -11,3 +11,20 @@ export type PaymentDataType = {
     [key: string]: any;
   }
 };
+
+// ========================
+// NOTIFICATION MODELS
+// ========================
+export type NotificationType = {
+  _id: string;
+  pi_uid: string;
+  is_cleared: boolean;
+  reason: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+export interface INotification {
+  is_cleared?: boolean;
+  reason: string;
+};

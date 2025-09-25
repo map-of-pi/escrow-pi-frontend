@@ -16,3 +16,14 @@
   border-radius: 50%;
   background-color: #d0d0d086;
 }
+
+.badge_dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #ff3b30; /* iOS red tone */
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--default-primary-color);
+}
