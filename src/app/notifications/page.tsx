@@ -28,6 +28,10 @@ export default function NotificationsPage() {
         setItems([...notCleared, ...cleared]);
         setSkip(skip + limit);
         if (res.length < limit) setHasMore(false);
+        // Signal possible change in unread count
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('escrowpi:notifications-updated'));
+        }
       } else {
         setHasMore(false);
       }
@@ -56,6 +60,10 @@ export default function NotificationsPage() {
     setItems(list => list.map(n => n._id === id ? { ...n, is_cleared: !n.is_cleared } : n));
     try {
       await updateNotification(id);
+      // Inform listeners (Navbar) to refresh unread indicator
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('escrowpi:notifications-updated'));
+      }
     } catch (e) {
       console.error('Failed to toggle notification', e);
       // rollback

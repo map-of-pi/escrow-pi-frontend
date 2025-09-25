@@ -22,6 +22,7 @@ export default function Navbar() {
   const [ready, setReady] = useState(() => (pathname ?? '/') !== '/');
   const { currentUser } = useContext(AppContext);
   const [hasUnread, setHasUnread] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     setIsHomePage((pathname ?? '/') === '/');
@@ -66,19 +67,26 @@ export default function Navbar() {
     let cancelled = false;
     const check = async () => {
       try {
-        if (!currentUser?.pi_uid) { setHasUnread(false); return; }
+        if (!currentUser?.pi_uid) { setHasUnread(false); setUnreadCount(0); return; }
         const res = await getNotifications({ pi_uid: currentUser.pi_uid, skip: 0, limit: 0, status: 'uncleared' });
-        if (!cancelled) setHasUnread(Array.isArray(res) && res.length > 0);
+        const count = Array.isArray(res) ? res.length : 0;
+        if (!cancelled) { setUnreadCount(count); setHasUnread(count > 0); }
       } catch {
-        if (!cancelled) setHasUnread(false);
+        if (!cancelled) { setHasUnread(false); setUnreadCount(0); }
       }
     };
     check();
-    // also re-check when sidebar is opened (user might have read some)
+    // re-check on window focus and when notifications update event is dispatched
     if (typeof window !== 'undefined') {
       const onFocus = () => check();
+      const onUpdated = () => check();
       window.addEventListener('focus', onFocus);
-      return () => { cancelled = true; window.removeEventListener('focus', onFocus); };
+      window.addEventListener('escrowpi:notifications-updated', onUpdated as EventListener);
+      return () => {
+        cancelled = true;
+        window.removeEventListener('focus', onFocus);
+        window.removeEventListener('escrowpi:notifications-updated', onUpdated as EventListener);
+      };
     }
     return () => { cancelled = true; };
   }, [currentUser?.pi_uid, sidebarOpen]);
@@ -191,10 +199,19 @@ export default function Navbar() {
             <div className="mb-3">
               <button
                 onClick={() => { router.push('/notifications'); setSidebarOpen(false); }}
-                className="w-full px-4 py-3 rounded-md text-base"
+                className="relative w-full px-4 py-3 rounded-md text-base flex items-center justify-center"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
               >
-                See Notifications
+                <span>See Notifications</span>
+                {unreadCount > 0 && (
+                  <span
+                    className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold flex items-center justify-center bg-red-600 border-2"
+                    style={{ color: 'var(--default-secondary-color)', borderColor: 'var(--default-secondary-color)' }}
+                    aria-label={`${unreadCount} unread notifications`}
+                  >
+                    {unreadCount}
+                  </span>
+                )}
               </button>
             </div>
 
