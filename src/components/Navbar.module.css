@@ -25,5 +25,6 @@
   height: 8px;
   background: #ff3b30; /* iOS red tone */
   border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--default-primary-color);
+  /* Gold border ring around the badge */
+  box-shadow: 0 0 0 2px #D4AF37;
 }

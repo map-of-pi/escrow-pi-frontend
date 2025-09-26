@@ -124,6 +124,9 @@ export default function Navbar() {
                 onClick={(e) => {
                   try {
                     e.preventDefault();
+                    if (typeof window !== 'undefined') {
+                      window.sessionStorage.setItem('escrowpi:cameFromInternalNav', '1');
+                    }
                     router.push(backHref);
                   } catch {
                     // As a last resort, hard navigate
@@ -141,7 +144,15 @@ export default function Navbar() {
               href="/?skipSplash=1"
               aria-label="Go Home"
               className="w-full h-full flex items-center justify-center"
-              onClick={(e) => { e.preventDefault(); if (!disabled) router.push('/?skipSplash=1'); }}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!disabled) {
+                  if (typeof window !== 'undefined') {
+                    window.sessionStorage.setItem('escrowpi:cameFromInternalNav', '1');
+                  }
+                  router.push('/?skipSplash=1');
+                }
+              }}
             >
               <MdHome size={24} className={`${disabled ? 'text-[var(--default-tertiary-color)]' : 'text-[var(--default-secondary-color)]'}`} />
             </Link>
