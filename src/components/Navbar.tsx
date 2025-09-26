@@ -204,7 +204,7 @@ export default function Navbar() {
             aria-modal="true"
           >
             <div className="mb-3 text-center">
-              <h2 className="text-lg font-semibold">Menu</h2>
+              <h2 className="text-lg font-semibold">{currentUser?.pi_username || 'Menu'}</h2>
             </div>
 
             <div className="mb-3">
