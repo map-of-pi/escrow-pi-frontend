@@ -7,6 +7,8 @@ import { toast } from 'react-toastify';
 import { AppContext } from '@/context/AppContextProvider';
 import { payWithPi } from '@/config/payment';
 import { PaymentDataType } from '@/types';
+import NotificationDialog from '@/components/NotificationDialog';
+import { getNotifications } from '@/services/notificationApi';
 
 function Splash() {
   return (
@@ -38,6 +40,7 @@ export default function HomePage() {
   const [showSend, setShowSend] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [showNotificationPopup, setShowNotificationPopup] = useState(false);
 
   // Decide splash behavior before paint to minimize flash and keep SSR/CSR consistent
   useLayoutEffect(() => {
@@ -70,6 +73,34 @@ export default function HomePage() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Check for uncleared notifications and show dialog once per session
+  useEffect(() => {
+    const checkUncleared = async () => {
+      try {
+        if (!currentUser?.pi_uid) { setShowNotificationPopup(false); return; }
+        // If user navigated back to home from internal pages, do not show popup
+        const cameFromInternal = typeof window !== 'undefined' && window.sessionStorage.getItem('escrowpi:cameFromInternalNav') === '1';
+        if (cameFromInternal) { setShowNotificationPopup(false); return; }
+        // Avoid re-showing within this session
+        const hasShown = typeof window !== 'undefined' && window.sessionStorage.getItem('escrowpi:notificationShown') === '1';
+        if (hasShown) { setShowNotificationPopup(false); return; }
+        const res = await getNotifications({ pi_uid: currentUser.pi_uid, skip: 0, limit: 0, status: 'uncleared' });
+        if (Array.isArray(res) && res.length > 0) {
+          setShowNotificationPopup(true);
+        } else {
+          setShowNotificationPopup(false);
+        }
+      } catch {
+        setShowNotificationPopup(false);
+      }
+    };
+
+    // Only check after splash is gone to avoid stacking overlays
+    if (!loading) {
+      checkUncleared();
+    }
+  }, [currentUser?.pi_uid, loading]);
 
   // No longer manipulating body attributes; Navbar listens for 'escrowpi:ready'
 
@@ -395,6 +426,16 @@ export default function HomePage() {
             </div>
           </div>
         </Modal>
+
+        {/* Notification popup like Map-of-Pi */}
+        {!loading && showNotificationPopup && (
+          <NotificationDialog
+            message="You have notifications"
+            url="/notifications"
+            onClose={() => setShowNotificationPopup(false)}
+            setShowDialog={setShowNotificationPopup}
+          />
+        )}
       </>
     </div>
   );

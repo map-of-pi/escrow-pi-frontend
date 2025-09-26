@@ -3,6 +3,7 @@ import './global.css';
 import React from 'react';
 import 'react-toastify/dist/ReactToastify.css';
 import { ToastContainer } from 'react-toastify';
+import Script from 'next/script';
 import Navbar from '@/components/Navbar';
 import { Lato } from 'next/font/google';
 import AppContextProvider from '@/context/AppContextProvider';
@@ -42,15 +43,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           content="font-src 'self' https://cdnjs.cloudflare.com/ajax/libs/font-awesome/https://fonts.gstatic.com/;"
         />
         {/* Google tag (gtag.js) */}
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-0T7BSEVRN9"></script>
-        <script dangerouslySetInnerHTML={{
-          __html: `
+        <Script src="https://www.googletagmanager.com/gtag/js?id=G-0T7BSEVRN9" strategy="afterInteractive" />
+        <Script id="ga-gtag" strategy="afterInteractive">
+          {`
             window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
+            function gtag(){dataLayer.push(arguments);} 
             gtag('js', new Date());
             gtag('config', 'G-0T7BSEVRN9');
-          `,
-        }} />
+          `}
+        </Script>
       </head>
       <body className={lato.className}>
         <div className="min-h-screen flex flex-col">
