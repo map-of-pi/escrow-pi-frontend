@@ -1,8 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
-import { replayIntegration } from '@sentry/browser';
 
-// initialize Sentry only in production environment
-if (process.env.NODE_ENV === 'production') {
+// initialize Sentry only in production or staging environment
+if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging') {
   try {
     Sentry.init({
       dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,

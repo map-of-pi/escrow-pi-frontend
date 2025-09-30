@@ -151,10 +151,12 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
     if (isSigningInUser || currentUser) return
     autoLoginUser();
 
+    const nodeEnv = process.env.NODE_ENV as 'development' | 'staging';
+
     // attempt to load and initialize Pi SDK in parallel
     loadPiSdk()
       .then(Pi => {
-        Pi.init({ version: '2.0', sandbox: process.env.NODE_ENV === 'development' });
+        Pi.init({ version: '2.0', sandbox: nodeEnv === 'development' || nodeEnv === 'staging' });
         return Pi.nativeFeaturesList();
       })
       .then(features => setAdsSupported(features.includes("ad_network")))
