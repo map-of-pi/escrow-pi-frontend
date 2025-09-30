@@ -33,7 +33,7 @@ export const configureLogger = () => {
       }
     };
 
-  } else if (process.env.NODE_ENV === 'development') {
+  } else if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'staging') {
     // In development, we want to log only to the browser/ console
     log.setLevel('info');
   }
