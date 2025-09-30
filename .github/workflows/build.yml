@@ -48,9 +48,9 @@ jobs:
         run: |
           echo "Running build for branch: $GITHUB_REF_NAME"
           if [ "$GITHUB_REF_NAME" = "dev" ]; then
-            echo "✅ Dev Branch build"
+            echo "✅ Dev branch build"
           elif [ "$GITHUB_REF_NAME" = "staging" ]; then
-            echo "✅ Staging Branch build"
+            echo "✅ Staging branch build"
           else
-            echo "✅ Main Branch build"
+            echo "✅ Main branch build"
           fi
