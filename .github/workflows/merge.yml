@@ -15,19 +15,33 @@ jobs:
   merge:
     name: 🔀 Merge
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'dev' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     # The sequence of tasks that will be executed as part of the job
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Merge dev to main
+      - name: Determine source and destination
+        id: branches
+        run: |
+          if [ "${{ github.event.workflow_run.head_branch }}" = "dev" ]; then
+            echo "source=dev" >> $GITHUB_OUTPUT
+            echo "destination=staging" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.workflow_run.head_branch }}" = "staging" ]; then
+            echo "source=staging" >> $GITHUB_OUTPUT
+            echo "destination=main" >> $GITHUB_OUTPUT
+          else
+            echo "No merge needed for branch ${{ github.event.workflow_run.head_branch }}"
+            exit 0
+          fi
+
+      - name: Merge source to destination
         uses: repo-sync/pull-request@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          source_branch: "dev"
-          destination_branch: "main"
-          pr_title: "Automated PR to merge dev to main"
-          pr_body: ":robot: Automated PR from **dev** to **main**; see commits."
+          source_branch: ${{ steps.branches.outputs.source }}
+          destination_branch: ${{ steps.branches.outputs.destination }}
+          pr_title: "Automated PR from ${{ steps.branches.outputs.source }} → ${{ steps.branches.outputs.destination }}"
+          pr_body: ":robot: Automated PR from **${{ steps.branches.outputs.source }}** to **${{ steps.branches.outputs.destination }}**; see commits."
           pr_label: "auto-pr"
