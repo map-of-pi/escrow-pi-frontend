@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import type { Metadata } from 'next';
 import './global.css';
 import React from 'react';
@@ -7,10 +8,15 @@ import Navbar from '@/components/Navbar';
 import { Lato } from 'next/font/google';
 import AppContextProvider from '@/context/AppContextProvider';
 
-export const metadata: Metadata = {
-  title: 'EscrowPi Wallet',
-  description: 'EscrowPi Wallet – frontend',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    title: 'EscrowPi Wallet',
+    description: 'EscrowPi Wallet brings safe and secure escrow payments to the Pi Network community.',
+    other: {
+      ...Sentry.getTraceData(), // <- this attaches Sentry tracing info
+    },
+  };
+}
 
 const lato = Lato({ weight: '400', subsets: ['latin'], display: 'swap' });
 

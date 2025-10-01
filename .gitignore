@@ -28,3 +28,6 @@ coverage/
 # Editor
 .vscode/
 .idea/
+
+# Sentry Config File
+.env.sentry-build-plugin
