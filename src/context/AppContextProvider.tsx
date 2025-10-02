@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import {
   createContext,
@@ -12,7 +13,7 @@ import axiosClient, { setAuthToken } from '@/config/client';
 import { onIncompletePaymentFound } from '@/config/payment';
 import { AuthResult } from '@/config/pi';
 import { IUser } from '@/types';
-import { toast } from 'react-toastify';
+import logger from '../../logger.config.mjs';
 
 interface IAppContextProps {
   currentUser: IUser | null;
@@ -67,73 +68,164 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
     }, 5000);
   };
 
-  /* Register User via Pi SDK */
   const registerUser = async () => {
-    // logger.info('Starting user registration.');
-    if (isSigningInUser || currentUser) return
-
-    if (typeof window !== 'undefined' && window.Pi?.initialized) {
-      try {
-        setIsSigningInUser(true);
-        const pioneerAuth: AuthResult = await window.Pi.authenticate([
-          'username', 
-          'payments', 
-          'wallet_address'
-        ], onIncompletePaymentFound);
-
-        console.log('Pioneer authentication successful:', pioneerAuth);
-        // Send accessToken to backend
-        const res = await axiosClient.post(
-          "/users/authenticate", 
-          {}, // empty body
-          {
-            headers: {
-              Authorization: `Bearer ${pioneerAuth.accessToken}`,
-            },
-          }
-        );
-
-        if (res.status === 200) {
-          setAuthToken(res.data?.token);
-          setCurrentUser(res.data.user);
-          // logger.info('User authenticated successfully.');
-        } else {
-          setCurrentUser(null);
-          // logger.error('User authentication failed.');
-        }
-      } catch (error) {
-        // logger.error('Error during user registration:', error);
-        toast.error('Error during user registration.');
-      } finally {
-        setTimeout(() => setIsSigningInUser(false), 2500);
+    logger.info('=== Starting user registration ===');
+  
+    if (isSigningInUser || currentUser) {
+      logger.warn('Skipping registration: already signing in or user exists');
+      return;
+    }
+  
+    if (typeof window === 'undefined' || !window.Pi?.initialized) {
+      logger.error('Pi SDK is not initialized');
+      toast.error('Pi SDK failed to initialize.');
+      return;
+    }
+  
+    try {
+      setIsSigningInUser(true);
+  
+      // Step 1: Authenticate Pioneer
+      logger.info('Authenticating Pioneer...');
+      const pioneerAuth: AuthResult = await window.Pi.authenticate(
+        ['username', 'payments', 'wallet_address'],
+        onIncompletePaymentFound
+      );
+      logger.info('Pioneer authentication successful', pioneerAuth);
+  
+      // Step 2: Send accessToken to backend
+      logger.info('Sending accessToken to backend...');
+      const res = await axiosClient.post(
+        '/users/authenticate',
+        {}, // empty body
+        { headers: { Authorization: `Bearer ${pioneerAuth.accessToken}` } }
+      );
+  
+      logger.info('Backend response:', res.status, res.data);
+  
+      if (res.status === 200) {
+        setAuthToken(res.data?.token);
+        setCurrentUser(res.data.user);
+        logger.info('User authenticated successfully', res.data.user);
+      } else {
+        setCurrentUser(null);
+        logger.error('User authentication failed', res.status, res.data);
       }
-    } else {
-      // logger.error('PI SDK failed to initialize.');
-      toast.error('PI SDK failed to initialize.');
+  
+    } catch (error: any) {
+      // Full error logging
+      logger.error('Error during user registration:', error);
+      if (error.response) {
+        logger.error('Axios response error:', error.response.status, error.response.data);
+      }
+      toast.error('Error during user registration. Check console for details.');
+    } finally {
+      setTimeout(() => setIsSigningInUser(false), 2500);
     }
   };
 
-  /* Attempt Auto Login (fallback to Pi auth) */
   const autoLoginUser = async () => {
-    // logger.info('Attempting to auto-login user.');
+    logger.info('=== Attempting auto-login ===');
+  
     try {
       setIsSigningInUser(true);
+  
+      // Step 1: Try fetching current user from backend
+      logger.info('Fetching /users/me...');
       const res = await axiosClient.get('/users/me');
-
+      logger.info('Backend response:', res.status, res.data);
+  
       if (res.status === 200) {
-        // logger.info('Auto-login successful.');
         setCurrentUser(res.data.user);
+        logger.info('Auto-login successful', res.data.user);
       } else {
-        // logger.warn('Auto-login failed.');
         setCurrentUser(null);
+        logger.warn('Auto-login failed', res.status, res.data);
+        // fallback to Pioneer auth
+        logger.info('Falling back to registerUser...');
+        await registerUser();
       }
-    } catch (error) {
-      // logger.error('Auto login unresolved; attempting Pi SDK authentication:', error);
+  
+    } catch (error: any) {
+      logger.error('Auto-login error:', error);
+      if (error.response) {
+        logger.error('Axios response error:', error.response.status, error.response.data);
+      }
+      // fallback to Pioneer auth
+      logger.info('Falling back to registerUser due to auto-login failure...');
       await registerUser();
     } finally {
       setTimeout(() => setIsSigningInUser(false), 2500);
     }
   };
+
+  // /* Register User via Pi SDK */
+  // const registerUser = async () => {
+  //   logger.info('Starting user registration.');
+  //   if (isSigningInUser || currentUser) return;
+
+  //   if (typeof window !== 'undefined' && window.Pi?.initialized) {
+  //     try {
+  //       setIsSigningInUser(true);
+  //       const pioneerAuth: AuthResult = await window.Pi.authenticate([
+  //         'username', 
+  //         'payments', 
+  //         'wallet_address'
+  //       ], onIncompletePaymentFound);
+
+  //       logger.debug('Pioneer authentication successful:', pioneerAuth);
+  //       // Send accessToken to backend
+  //       const res = await axiosClient.post(
+  //         "/users/authenticate", 
+  //         {}, // empty body
+  //         {
+  //           headers: {
+  //             Authorization: `Bearer ${pioneerAuth.accessToken}`,
+  //           },
+  //         }
+  //       );
+
+  //       if (res.status === 200) {
+  //         setAuthToken(res.data?.token);
+  //         setCurrentUser(res.data.user);
+  //         logger.info('User authenticated successfully.');
+  //       } else {
+  //         setCurrentUser(null);
+  //         logger.error('User authentication failed.');
+  //       }
+  //     } catch (error) {
+  //       logger.error('Error during user registration:', error);
+  //       toast.error('Error during user registration.');
+  //     } finally {
+  //       setTimeout(() => setIsSigningInUser(false), 2500);
+  //     }
+  //   } else {
+  //     logger.error('Pi SDK failed to initialize.');
+  //     toast.error('Pi SDK failed to initialize.');
+  //   }
+  // };
+
+  // /* Attempt Auto Login (fallback to Pi auth) */
+  // const autoLoginUser = async () => {
+  //   logger.info('Attempting to auto-login user.');
+  //   try {
+  //     setIsSigningInUser(true);
+  //     const res = await axiosClient.get('/users/me');
+
+  //     if (res.status === 200) {
+  //       logger.info('Auto-login successful.');
+  //       setCurrentUser(res.data.user);
+  //     } else {
+  //       logger.warn('Auto-login failed.');
+  //       setCurrentUser(null);
+  //     }
+  //   } catch (error) {
+  //     logger.error('Auto login unresolved; attempting Pi SDK authentication:', error);
+  //     await registerUser();
+  //   } finally {
+  //     setTimeout(() => setIsSigningInUser(false), 2500);
+  //   }
+  // };
 
   const loadPiSdk = (): Promise<typeof window.Pi> => {
     return new Promise((resolve, reject) => {
@@ -147,7 +239,7 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
   };
 
   useEffect(() => {
-    // logger.info('AppContextProvider mounted.');
+    logger.info('AppContextProvider mounted.');
     if (isSigningInUser || currentUser) return
     autoLoginUser();
 
@@ -160,7 +252,7 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
         return Pi.nativeFeaturesList();
       })
       .then(features => setAdsSupported(features.includes("ad_network")))
-      .catch(err => toast.error('Pi SDK load/ init error:', err));
+      .catch(err => logger.error('Pi SDK load/ init error:', err));
   }, [isSigningInUser]);
 
   return (
