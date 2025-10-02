@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 import { AppContext } from '@/context/AppContextProvider';
 import { payWithPi } from '@/config/payment';
 import { PaymentDataType } from '@/types';
+import axiosClient from '@/config/client';
 
 function Splash() {
   return (
@@ -38,6 +39,7 @@ export default function HomePage() {
   const [showSend, setShowSend] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [orderId, setOrderId] = useState<string>("");
 
   // Decide splash behavior before paint to minimize flash and keep SSR/CSR consistent
   useLayoutEffect(() => {
@@ -119,7 +121,7 @@ export default function HomePage() {
   };
 
   // Validate inputs and open the appropriate modal
-  const handleOpen = (type: 'send' | 'request') => {
+  const handleOpen = async (type: 'send' | 'request') => {
     const name = counterparty.trim();
     const desc = details.trim();
     const n = parseFloat((amountInput || '').replace(',', '.'));
@@ -136,6 +138,26 @@ export default function HomePage() {
       toast.error('Please enter a Pi amount greater than 0');
       return;
     }
+    await axiosClient.post('/orders/', {
+      orderType: type,
+      username: name,
+      comment: desc,
+      amount: fees.total
+    }).catch((err) => {
+      console.error('Error creating order:', err);
+      toast.error('Error creating order. Please try again.');
+      return;
+    }).then((res) => {
+      if (res?.data.order_no) {
+        console.log('Order created:', res.data);
+        setOrderId(res.data.order_no);
+        toast.success(`Order created successfully. New order with ${res.data.order_no}.`);
+        setShowSend(true)
+      } else {
+        toast.error('Error creating order. Please try again.');
+        return;
+      }
+    });
 
     setModalAmount(n);
     if (type === 'send') setShowSend(true);
@@ -336,7 +358,7 @@ export default function HomePage() {
         <Modal
           open={showSend}
           onClose={() => setShowSend(false)}
-          onConfirm={() => handleConfirm('send')}
+          onConfirm={() => handleSend()}
           confirmText="Confirm Send"
           title={(
             <div className="space-y-2">
@@ -360,6 +382,9 @@ export default function HomePage() {
 
               <div>EscrowPi fee:</div>
               <div className="text-right">{fmt(fees.escrowFee)} pi</div>
+
+              <div>Order id:</div>
+              <div className="text-right">{orderId} pi</div>
             </div>
           </div>
         </Modal>
@@ -391,7 +416,10 @@ export default function HomePage() {
               <div className="text-right">{fmt(fees.networkFees)} pi</div>
 
               <div>EscrowPi fee:</div>
-              <div className="text-right">{fmt(fees.escrowFee)} pi</div>
+              <div className="text-right">{fmt(fees.escrowFee)}</div>
+
+              <div>Order id:</div>
+              <div className="text-right">{orderId}</div>
             </div>
           </div>
         </Modal>
