@@ -9,7 +9,7 @@ import { logToSentry } from './sentry.client.config.mjs';
 export const configureLogger = () => {
   if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging') {
     // Silence default console logging in production or staging
-    log.setLevel('silent');
+    log.setLevel('info');
 
     /**
      * Override log.error to send meaningful errors to Sentry in production or staging.
@@ -31,6 +31,7 @@ export const configureLogger = () => {
 
         logToSentry(combinedMessage);
       }
+      console.error(...args);
     };
 
   } else if (process.env.NODE_ENV === 'development') {
