@@ -6,8 +6,8 @@ import Modal from '@/components/Modal';
 import { toast } from 'react-toastify';
 import { AppContext } from '@/context/AppContextProvider';
 import { payWithPi } from '@/config/payment';
-import { PaymentDataType } from '@/types';
-import axiosClient from '@/config/client';
+import { OrderTypeEnum, PaymentDataType } from '@/types';
+import { createOrder, updateUserOrder } from '@/services/orderApi';
 
 function Splash() {
   return (
@@ -39,7 +39,7 @@ export default function HomePage() {
   const [showSend, setShowSend] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [orderId, setOrderId] = useState<string>("");
+  const [orderNo, setOrderNo] = useState<string>("");
 
   // Decide splash behavior before paint to minimize flash and keep SSR/CSR consistent
   useLayoutEffect(() => {
@@ -114,20 +114,20 @@ export default function HomePage() {
     setModalAmount('');
   }
 
-  const handleConfirm = (type: 'send' | 'request') => {
+  const handleConfirm = (type: OrderTypeEnum) => {
     // TODO: Integrate with backend to create EscrowPi transaction
-    toast.info(`Demo: ${type === 'send' ? 'Sending' : 'Requesting'} ${fees.amt || 0} Pi via EscrowPi (backend pending)`);
+    toast.info(`Demo: ${type === OrderTypeEnum.Send ? 'Sending' : 'Requesting'} ${fees.amt || 0} Pi via EscrowPi (backend pending)`);
     reset();
   };
 
   // Validate inputs and open the appropriate modal
-  const handleOpen = async (type: 'send' | 'request') => {
+  const handleOpen = async (orderType: OrderTypeEnum) => {
     const name = counterparty.trim();
     const desc = details.trim();
     const n = parseFloat((amountInput || '').replace(',', '.'));
 
     if (!name) {
-      toast.error(type === 'send' ? 'Please enter Payee Pioneer Name' : 'Please enter Payer Pioneer Name');
+      toast.error(orderType === OrderTypeEnum.Send ? 'Please enter Payee Pioneer Name' : 'Please enter Payer Pioneer Name');
       return;
     }
     if (!desc) {
@@ -138,33 +138,29 @@ export default function HomePage() {
       toast.error('Please enter a Pi amount greater than 0');
       return;
     }
-    await axiosClient.post('/orders/', {
-      orderType: type,
-      username: name,
-      comment: desc,
-      amount: fees.total
-    }).catch((err) => {
-      console.error('Error creating order:', err);
-      toast.error('Error creating order. Please try again.');
-      return;
-    }).then((res) => {
-      if (res?.data.order_no) {
-        console.log('Order created:', res.data);
-        setOrderId(res.data.order_no);
-        toast.success(`Order created successfully. New order with ${res.data.order_no}.`);
-        setShowSend(true)
-      } else {
-        toast.error('Error creating order. Please try again.');
-        return;
+
+    const order_no = await createOrder(
+      { 
+        username: counterparty,
+        comment: desc,
+        orderType: orderType,
+        amount: n
       }
-    });
+    )
+    
+    if (order_no) {
+      setModalAmount(n);
+      setOrderNo(order_no);
+      toast.success(`Order created successfully. New order with ${order_no}.`);
+      if (orderType === OrderTypeEnum.Send) setShowSend(true);
+      else setShowRequest(true);
 
-    setModalAmount(n);
-    if (type === 'send') setShowSend(true);
-    else setShowRequest(true);
-  };
+    } else {
+      toast.error('order creation failed')
+    };
+  }
 
-   const onPaymentComplete = async (data:any) => {
+  const onPaymentComplete = async (data:any) => {
     setIsSaveLoading(false);  
     toast.success("Payment successfull")
     reset();
@@ -175,37 +171,45 @@ export default function HomePage() {
     setIsSaveLoading(false);
   }
   
-  const handleSend = async () => {
-    if (!currentUser?.pi_uid) {
+  const handleSend = async (orderType: OrderTypeEnum) => {
+    if (!currentUser?.pi_uid || !orderNo) {
       toast.error('SCREEN.MEMBERSHIP.VALIDATION.USER_NOT_LOGGED_IN_PAYMENT_MESSAGE')
       return 
     }
     setIsSaveLoading(true)
   
     const paymentData: PaymentDataType = {
-      amount: modalAmount,
+      amount: 5,
       memo: `Escrow payment to ${counterparty}`,
       metadata: { 
-        rceiver_username: counterparty,
-        details: details,
-        type: 'send_pi'
+        orderType: orderType,
+        order_no: orderNo
       },        
     };
     await payWithPi(paymentData, onPaymentComplete, onPaymentError);
   }
 
+  const handleRequest = async () => {
+   if (!currentUser || !orderNo) return
+   const newOrderNo = await updateUserOrder(orderNo);
+   if (newOrderNo) {
+    setIsSaveLoading(false);  
+    toast.success("Payment Request successfull")
+    reset();
+   }
+
+  }
+
   if (!mounted) {
     // Render a minimal stable wrapper on SSR and first client paint
-    return <div className="space-y-6 px-4" />;
+    return (
+    <div className="fixed inset-0 z-[999] flex flex-col items-center justify-start pt-24 bg-white">
+      <Image src="/escrow-pi-splash-logo.png" alt="EscrowPi" width={180} height={180} priority />
+    </div>);
   }
 
   return (
     <div className="space-y-6 px-4">
-      {loading && (
-        <div className="fixed inset-0 z-[999] flex flex-col items-center justify-start pt-24 bg-white">
-          <Image src="/escrow-pi-splash-logo.png" alt="EscrowPi" width={180} height={180} priority />
-        </div>
-      )}
       <>
           <div className="max-w-md mx-auto flex flex-col min-h-[calc(100vh-140px)]">
             <label className="block text-lg font-black text-gray-900 text-center">Payer/Payee Pioneer Name</label>
@@ -312,7 +316,7 @@ export default function HomePage() {
             </div>
             <div className="mt-auto grid gap-3 max-w-sm mx-auto w-full pb-6">
               <button
-                onClick={() => handleOpen('send')}
+                onClick={() => handleOpen(OrderTypeEnum.Send)}
                 className="w-full rounded-xl overflow-hidden appearance-none border-0 shadow-none outline-none focus:outline-none focus:ring-0 active:ring-0"
                 style={{ WebkitTapHighlightColor: 'transparent' }}
                 aria-label="Pay With EscrowPi"
@@ -328,7 +332,7 @@ export default function HomePage() {
               </button>
 
               <button
-                onClick={() => handleOpen('request')}
+                onClick={() => handleOpen(OrderTypeEnum.Request)}
                 className="w-full rounded-xl overflow-hidden appearance-none border-0 shadow-none outline-none focus:outline-none focus:ring-0 active:ring-0"
                 style={{ WebkitTapHighlightColor: 'transparent' }}
                 aria-label="Receive With EscrowPi"
@@ -358,7 +362,7 @@ export default function HomePage() {
         <Modal
           open={showSend}
           onClose={() => setShowSend(false)}
-          onConfirm={() => handleSend()}
+          onConfirm={() => handleSend(OrderTypeEnum.Send)}
           confirmText="Confirm Send"
           title={(
             <div className="space-y-2">
@@ -384,7 +388,7 @@ export default function HomePage() {
               <div className="text-right">{fmt(fees.escrowFee)} pi</div>
 
               <div>Order id:</div>
-              <div className="text-right">{orderId} pi</div>
+              <div className="text-right">{orderNo} pi</div>
             </div>
           </div>
         </Modal>
@@ -393,7 +397,7 @@ export default function HomePage() {
         <Modal
           open={showRequest}
           onClose={() => setShowRequest(false)}
-          onConfirm={() => handleConfirm('request')}
+          onConfirm={() => handleRequest()}
           confirmText="Confirm Request"
           title={(
             <div className="space-y-2">
@@ -419,7 +423,7 @@ export default function HomePage() {
               <div className="text-right">{fmt(fees.escrowFee)}</div>
 
               <div>Order id:</div>
-              <div className="text-right">{orderId}</div>
+              <div className="text-right">{orderNo}</div>
             </div>
           </div>
         </Modal>
