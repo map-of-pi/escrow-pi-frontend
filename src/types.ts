@@ -5,9 +5,31 @@ export interface IUser {
 };
 
 export type PaymentDataType = {
-  amount: number | string;
+  amount: number;
   memo: string;
   metadata: {
     [key: string]: any;
   }
 };
+
+export enum OrderTypeEnum {
+  Send= 'send',
+  Request='request'
+}
+
+export type IOrder = {
+  sender_username: string;
+  receiver_username: string;
+  amount: number;
+  order_no: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date
+}
+
+export type CommentType = {
+  description: string;
+  order_no: string;
+  createdAt: Date;
+  updatedAt: Date
+}
