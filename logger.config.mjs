@@ -3,16 +3,16 @@ import { logToSentry } from './sentry.client.config.mjs';
 
 /**
  * Configures the global logger behavior based on the environment.
- * In production; logs are sent to Sentry.
+ * In production and staging; logs are sent to Sentry.
  * In development; logs go to the browser/ console.
  */
 export const configureLogger = () => {
-  if (process.env.NODE_ENV === 'production') {
-    // Silence default console logging in production
+  if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging') {
+    // Silence default console logging in production or staging
     log.setLevel('silent');
 
     /**
-     * Override log.error to send meaningful errors to Sentry in production.
+     * Override log.error to send meaningful errors to Sentry in production or staging.
      * If the first argument is an Error object, capture it directly.
      * Otherwise, join all arguments into a single string and log that.
      */
