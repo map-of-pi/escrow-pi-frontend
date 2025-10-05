@@ -4,7 +4,6 @@ import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
 import transactions from '@/data/transactions.json';
 import { AppContext } from '@/context/AppContextProvider';
-import { IOrder } from '@/types';
 import { fetchSingleUserOrder } from '@/services/orderApi';
 import { mapOrdersToTxItems, TxItem } from '@/lib';
 
