@@ -22,12 +22,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Merge dev to main
+      - name: Merge dev to staging
         uses: repo-sync/pull-request@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           source_branch: "dev"
-          destination_branch: "main"
-          pr_title: "Automated PR to merge dev to main"
-          pr_body: ":robot: Automated PR from **dev** to **main**; see commits."
+          destination_branch: "staging"
+          pr_title: "Automated PR to merge dev to staging"
+          pr_body: ":robot: Automated PR from **dev** to **staging**; see commits."
           pr_label: "auto-pr"
