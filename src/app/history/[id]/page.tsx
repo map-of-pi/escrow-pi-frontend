@@ -4,42 +4,10 @@ import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
 import transactions from '@/data/transactions.json';
 import { AppContext } from '@/context/AppContextProvider';
-import { fetchSingleUserOrder } from '@/services/orderApi';
-import { mapOrdersToTxItems, TxItem } from '@/lib';
-
-type TxStatus = 'requested' | 'paid' | 'cancelled' | 'declined' | 'disputed' | 'fulfilled' | 'completed';
-
-type Tx = {
-  id: string;
-  direction: 'send' | 'receive';
-  myRole: 'payer' | 'payee';
-  counterparty: string;
-  amount: number;
-  status: TxStatus;
-  date: string;
-  notes?: string;
-  needsPayerResponse?: boolean; // show popup when true and this is a receive where I am payer
-};
-
-const statusLabel: Record<TxStatus, string> = {
-  requested: 'Requested',
-  paid: 'Paid',
-  cancelled: 'Cancelled',
-  declined: 'Declined',
-  disputed: 'Disputed',
-  fulfilled: 'Fulfilled',
-  completed: 'Completed',
-};
-
-const statusClasses: Record<TxStatus, string> = {
-  requested: 'bg-amber-50 text-amber-800 border-amber-200',
-  paid: 'bg-blue-50 text-blue-800 border-blue-200',
-  cancelled: 'bg-gray-50 text-gray-700 border-gray-200',
-  declined: 'bg-gray-50 text-gray-700 border-gray-200',
-  disputed: 'bg-red-50 text-red-800 border-red-200',
-  fulfilled: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-  completed: 'bg-green-50 text-green-800 border-green-200',
-};
+import { fetchSingleUserOrder, updateOrderStatus } from '@/services/orderApi';
+import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend } from '@/lib';
+import { toast } from 'react-toastify';
+import { addComment } from '@/services/commentApi';
 
 export default function TxDetailsPage() {
   const router = useRouter();
@@ -47,11 +15,11 @@ export default function TxDetailsPage() {
   const id = String(params?.id || '');
 
   // Load from shared mock JSON
-  const initial = useMemo<Tx | undefined>(() => {
-    return (transactions as unknown as Tx[]).find((t) => t.id === id);
+  const initial = useMemo<TxItem | undefined>(() => {
+    return (transactions as unknown as TxItem[]).find((t) => t.id === id);
   }, [id]);
 
-  const [tx, setTx] = useState<Tx | undefined>(initial);
+  const [tx, setTx] = useState<TxItem | undefined>(initial);
   const [showPopup, setShowPopup] = useState<boolean>(!!(tx?.needsPayerResponse && tx.direction === 'receive' && tx.status === 'requested'));
   const { currentUser } = useContext(AppContext);
   const [order, setOrder] = useState<TxItem | null>(null);
@@ -68,18 +36,21 @@ export default function TxDetailsPage() {
   const [actionBanner, setActionBanner] = useState<string>("");
   const [showComments, setShowComments] = useState<boolean>(false);
   type Comment = { author: string; text: string; ts: string };
+
   // Prefer user-provided handle stored in localStorage. Fallback to '@you'.
   const myUsername = useMemo(() => {
     if (typeof window === 'undefined') return '@you';
-    const v = window.localStorage.getItem('escrowpi.username');
-    return v && v.trim().length ? v.trim() : '@you';
+    const v = currentUser?.pi_username;
+    return v ? v.trim() : '@you';
   }, []);
-  const initialComments: Comment[] = useMemo(() => {
-    if (!tx) return [];
-    const author = tx.myRole === 'payer' ? tx.counterparty : myUsername;
-    return tx.notes ? [{ author, text: tx.notes, ts: tx.date }] : [];
-  }, [tx, myUsername]);
-  const [comments, setComments] = useState<Comment[]>(initialComments);
+
+  // const initialComments: Comment[] = useMemo(() => {
+  //   if (!tx) return [];
+  //   const author = tx.myRole === 'payer' ? tx.counterparty : myUsername;
+  //   return comments && comments.length ? [{ author, text: comments[0].text, ts: tx.date }] : [];
+  // }, [tx, myUsername]);
+  
+  const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState<string>("");
 
   // UC9: Refund percentage state
@@ -158,10 +129,11 @@ export default function TxDetailsPage() {
         if (!currentUser?.pi_username) return;
         const fetchedOrder = await fetchSingleUserOrder(id);
         if (!fetchedOrder) {
-          return setOrder(null)
+          return setTx(undefined)
         }
         const txItem = mapOrdersToTxItems([fetchedOrder.order], currentUser.pi_username);
-        setOrder(txItem[0]);
+        setTx(txItem[0] ?? undefined);
+        setComments(mapCommentsToFrontend(fetchedOrder.comments, currentUser.pi_username))
       } catch (error) {
         console.error("Error loading orders:", error);
       } finally {
@@ -170,6 +142,53 @@ export default function TxDetailsPage() {
     };
     loadOrder();
   }, [currentUser, id]);
+
+  const handleAction = async (newStatus: TxStatus) => {
+    if (tx?.status === newStatus) return
+    try {
+      const result = await updateOrderStatus(id, newStatus);
+      if (!result?.order || !currentUser?.pi_username){
+        toast.warn('can not find order');
+        return
+      }
+      const txItem = mapOrdersToTxItems([result.order], currentUser.pi_username);
+      setTx(txItem[0]);
+      setComments((prev) => [...prev, mapCommentToFrontend( result.comment, currentUser.pi_username),]);
+      setShowDispute(false)
+
+      if (newComment) {
+        handleAddComment();
+      }
+
+    } catch (error:any) {
+      toast.error('error updating order')
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleAddComment = async () => {
+    try {
+      if (!newComment || !currentUser?.pi_username){
+        toast.warn('can not add comment');
+        return
+      }
+
+      const addedComment = await addComment({order_no: id, description: newComment.trim()});
+      if (!addedComment || !currentUser?.pi_username){
+        toast.warn('can not add comment');
+        return
+      }
+
+      setComments((prev) => [...prev, mapCommentToFrontend( addedComment, currentUser.pi_username),]);
+      setNewComment('');
+
+    } catch (error:any) {
+      toast.error('error adding new comment')
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (!tx) {
     return (
@@ -226,16 +245,7 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['disputed']}.`, ts: new Date().toISOString() };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'disputed' });
-                  setShowDispute(false);
-                  setActionBanner('Action completed successfully');
-                  if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
-                }}
+                onClick={()=> handleAction('disputed')}
               >
                 Confirm
               </button>
@@ -489,11 +499,7 @@ export default function TxDetailsPage() {
                 <button
                   disabled={isTerminal || newComment.trim().length === 0}
                   className={`px-3 py-2 rounded text-xs font-semibold ${!isTerminal && newComment.trim().length ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
-                  onClick={() => {
-                    const entry: Comment = { author: myUsername, text: newComment.trim(), ts: new Date().toISOString() };
-                    setComments((prev) => [...prev, entry]);
-                    setNewComment('');
-                  }}
+                  onClick={() => handleAddComment()}
                 >
                   Add Comment
                 </button>

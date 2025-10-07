@@ -1,5 +1,6 @@
 import axiosClient from "@/config/client";
-import { CommentType, IOrder, OrderTypeEnum } from "@/types";
+import { TxStatus } from "@/lib";
+import { IComment, IOrder, OrderTypeEnum } from "@/types";
 import { toast } from "react-toastify";
 
 export const createOrder = async (
@@ -44,7 +45,7 @@ export const fetchUserOrders = async ():Promise<IOrder[]> => {
   }
 }
 
-export const fetchSingleUserOrder = async (orderNo:string):Promise<{order:IOrder, comments: CommentType} | null> => {
+export const fetchSingleUserOrder = async (orderNo:string):Promise<{order:IOrder, comments: IComment[]} | null> => {
   try {
     const res = await axiosClient.get(`/orders/${orderNo}`);
     if (res.status===200) {
@@ -62,9 +63,26 @@ export const fetchSingleUserOrder = async (orderNo:string):Promise<{order:IOrder
   }
 }
 
-export const updateUserOrder = async (orderNo:string):Promise<IOrder | null> => {
+export const confirmRequestOrder = async (orderNo:string):Promise<string | null> => {
   try {
-    const res = await axiosClient.put(`/orders/${orderNo}`);
+    const res = await axiosClient.put(`/orders/confirm-request/${orderNo}`);
+    if (res.status===200) {
+      toast.success(`User Order updated successfully.`);
+      return res.data;
+    } else {
+      toast.error('No user order.');
+      return null
+    }
+
+  } catch (error:any) {
+    toast.error('Error updating user order. Please try again.');
+    return null
+  }
+}
+
+export const updateOrderStatus = async (orderNo:string, status: TxStatus):Promise<{order:IOrder, comment: IComment} | null> => {
+  try {
+    const res = await axiosClient.put(`/orders/update-status/${orderNo}`, {status});
     if (res.status===200) {
       toast.success(`User Order updated successfully.`);
       return res.data;
