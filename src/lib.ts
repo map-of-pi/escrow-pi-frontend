@@ -9,7 +9,7 @@ export type TxStatus =
   | 'disputed'
   | 'fulfilled'
   | 'expired'
-  | 'completed';
+  | 'released';
 export type Direction = 'send' | 'receive';
 
 export type TxItem = {
@@ -20,7 +20,7 @@ export type TxItem = {
   amount: number;
   status: TxStatus;
   date: string; // ISO
-  notes?: string;
+  auditLog?: string;
 };
 
 const resolveRole = (senderUsername: string, authUsername: string) => {
