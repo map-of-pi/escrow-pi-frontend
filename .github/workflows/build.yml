@@ -2,16 +2,18 @@ name: EscrowPi Build
 
 # Controls when the workflow will execute
 on:
-  # Triggers the workflow on push or pull request events for the "main" and "dev" branch
+  # Triggers the workflow on push or pull request events for the defined branches
   push:
     branches: 
-      - main
       - dev
+      - staging
+      - main
   pull_request:
     branches:
-      - main
       - dev
-
+      - staging
+      - main
+      
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
@@ -41,3 +43,14 @@ jobs:
         
       - name: Execute Tests for Frontend
         run: npm run test -- --passWithNoTests
+
+      - name: Branch-specific build info
+        run: |
+          echo "Running build for branch: $GITHUB_REF_NAME"
+          if [ "$GITHUB_REF_NAME" = "dev" ]; then
+            echo "✅ Dev branch build"
+          elif [ "$GITHUB_REF_NAME" = "staging" ]; then
+            echo "✅ Staging branch build"
+          else
+            echo "✅ Main branch build"
+          fi

@@ -1,9 +1,12 @@
 "use client";
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
 import transactions from '@/data/transactions.json';
 import { toast } from 'react-toastify';
+import { AppContext } from '@/context/AppContextProvider';
+import { fetchSingleUserOrder } from '@/services/orderApi';
+import { mapOrdersToTxItems, TxItem } from '@/lib';
 
 type TxStatus = 'requested' | 'paid' | 'cancelled' | 'declined' | 'disputed' | 'fulfilled' | 'released';
 
@@ -51,6 +54,9 @@ export default function TxDetailsPage() {
 
   const [tx, setTx] = useState<Tx | undefined>(initial);
   const [showPopup, setShowPopup] = useState<boolean>(!!(tx?.needsPayerResponse && tx.direction === 'receive' && tx.status === 'requested'));
+  const { currentUser } = useContext(AppContext);
+  const [order, setOrder] = useState<TxItem | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showAccept, setShowAccept] = useState<boolean>(false);
   const [showReject, setShowReject] = useState<boolean>(false);
   const [showCancel, setShowCancel] = useState<boolean>(false);
@@ -146,6 +152,25 @@ export default function TxDetailsPage() {
     const recomputedTotal = base + completionStake + network + escrowFee;
     return { base, completionStake, networkFees: network, escrowFee, total: recomputedTotal };
   };
+
+  useEffect(() => {
+    const loadOrder = async () => {
+      try {
+        if (!currentUser?.pi_username) return;
+        const fetchedOrder = await fetchSingleUserOrder(id);
+        if (!fetchedOrder) {
+          return setOrder(null)
+        }
+        const txItem = mapOrdersToTxItems([fetchedOrder.order], currentUser.pi_username);
+        setOrder(txItem[0]);
+      } catch (error) {
+        console.error("Error loading orders:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadOrder();
+  }, [currentUser, id]);
 
   if (!tx) {
     return (

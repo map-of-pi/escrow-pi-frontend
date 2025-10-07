@@ -14,6 +14,7 @@ pnpm-debug.log*
 # Env
 .env
 .env.local
+.env.development
 .env.development.local
 .env.test.local
 .env.production.local
@@ -27,3 +28,9 @@ coverage/
 # Editor
 .vscode/
 .idea/
+
+# Deployment
+public/validation-key.txt
+
+# Sentry Config File
+.env.sentry-build-plugin
