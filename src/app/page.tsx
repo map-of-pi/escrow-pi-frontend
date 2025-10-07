@@ -7,7 +7,7 @@ import { toast } from 'react-toastify';
 import { AppContext } from '@/context/AppContextProvider';
 import { payWithPi } from '@/config/payment';
 import { OrderTypeEnum, PaymentDataType } from '@/types';
-import { createOrder, updateUserOrder } from '@/services/orderApi';
+import { createOrder, confirmRequestOrder } from '@/services/orderApi';
 
 function Splash() {
   return (
@@ -191,7 +191,7 @@ export default function HomePage() {
 
   const handleRequest = async () => {
    if (!currentUser || !orderNo) return
-   const newOrderNo = await updateUserOrder(orderNo);
+   const newOrderNo = await confirmRequestOrder(orderNo);
    if (newOrderNo) {
     setIsSaveLoading(false);  
     toast.success("Payment Request successfull")
@@ -388,7 +388,7 @@ export default function HomePage() {
               <div className="text-right">{fmt(fees.escrowFee)} pi</div>
 
               <div>Order id:</div>
-              <div className="text-right">{orderNo} pi</div>
+              <div className="text-right">{orderNo}</div>
             </div>
           </div>
         </Modal>
