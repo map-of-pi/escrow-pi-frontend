@@ -111,9 +111,6 @@ export default function HistoryPage() {
                       {tx.amount.toFixed(2)}{" "}
                       <span className="text-lg align-top">Pi</span>
                     </div>
-                    {tx.notes && (
-                      <div className="text-xs text-gray-500">{tx.notes}</div>
-                    )}
                   </div>
                   <div className="text-xs text-gray-500">{localDate}</div>
                 </div>
