@@ -15,7 +15,7 @@ const statusClasses: Record<TxStatus, string> = {
   declined: "bg-gray-50 text-gray-700 border-gray-200",
   disputed: "bg-red-50 text-red-800 border-red-200",
   fulfilled: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  completed: "bg-green-50 text-green-800 border-green-200",
+  released: "bg-green-50 text-green-800 border-green-200",
 };
 
 const statusLabel: Record<TxStatus, string> = {
@@ -25,7 +25,7 @@ const statusLabel: Record<TxStatus, string> = {
   declined: "Declined",
   disputed: "Disputed",
   fulfilled: "Fulfilled",
-  completed: "Completed",
+  released: "Released",
   initiated: "Initiated",
   expired: "Expired",
 };
@@ -111,9 +111,6 @@ export default function HistoryPage() {
                       {tx.amount.toFixed(2)}{" "}
                       <span className="text-lg align-top">Pi</span>
                     </div>
-                    {tx.notes && (
-                      <div className="text-xs text-gray-500">{tx.notes}</div>
-                    )}
                   </div>
                   <div className="text-xs text-gray-500">{localDate}</div>
                 </div>
