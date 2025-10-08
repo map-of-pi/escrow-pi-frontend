@@ -200,7 +200,7 @@ export default function HomePage() {
 
   }
 
-  if (!mounted) {
+  if (!mounted || isSigningInUser) {
     // Render a minimal stable wrapper on SSR and first client paint
     return (
     <div className="fixed inset-0 z-[999] flex flex-col items-center justify-start pt-24 bg-white">
