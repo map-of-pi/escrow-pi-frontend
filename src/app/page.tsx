@@ -179,7 +179,7 @@ export default function HomePage() {
     setIsSaveLoading(true)
   
     const paymentData: PaymentDataType = {
-      amount: parseFloat(modalAmount.toString()),
+      amount: fees.total,
       memo: `Escrow payment to ${counterparty}`,
       metadata: { 
         orderType: orderType,
