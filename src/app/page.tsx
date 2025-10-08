@@ -19,7 +19,7 @@ function Splash() {
 
 export default function HomePage() {
   // Always start as loading on server and first client render to avoid hydration mismatch
-  const { currentUser, setIsSaveLoading, isSigningInUser } = useContext(AppContext);
+  const { currentUser, setIsSaveLoading, isSaveLoading, isSigningInUser } = useContext(AppContext);
   const [loading, setLoading] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     try {
@@ -40,6 +40,7 @@ export default function HomePage() {
   const [showRequest, setShowRequest] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [orderNo, setOrderNo] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // Decide splash behavior before paint to minimize flash and keep SSR/CSR consistent
   useLayoutEffect(() => {
@@ -109,16 +110,16 @@ export default function HomePage() {
   }, [amountInput]);
 
   const reset = () => {
+    setIsSaveLoading(false)
     setShowSend(false);
     setShowRequest(false);
     setModalAmount('');
+    setCounterparty('');
+    setAmountInput('1.0');
+    setModalAmount('');
+    setDetails('');
+    setOrderNo('')
   }
-
-  const handleConfirm = (type: OrderTypeEnum) => {
-    // TODO: Integrate with backend to create EscrowPi transaction
-    toast.info(`Demo: ${type === OrderTypeEnum.Send ? 'Sending' : 'Requesting'} ${fees.amt || 0} Pi via EscrowPi (backend pending)`);
-    reset();
-  };
 
   // Validate inputs and open the appropriate modal
   const handleOpen = async (orderType: OrderTypeEnum) => {
@@ -161,8 +162,7 @@ export default function HomePage() {
   }
 
   const onPaymentComplete = async (data:any) => {
-    setIsSaveLoading(false);  
-    toast.success("Payment successfull")
+    toast.success("Payment successfull");
     reset();
   }
   
@@ -179,7 +179,7 @@ export default function HomePage() {
     setIsSaveLoading(true)
   
     const paymentData: PaymentDataType = {
-      amount: 5,
+      amount: parseFloat(modalAmount.toString()),
       memo: `Escrow payment to ${counterparty}`,
       metadata: { 
         orderType: orderType,
@@ -191,9 +191,9 @@ export default function HomePage() {
 
   const handleRequest = async () => {
    if (!currentUser || !orderNo) return
+   setIsSaveLoading(true)
    const newOrderNo = await confirmRequestOrder(orderNo);
-   if (newOrderNo) {
-    setIsSaveLoading(false);  
+   if (newOrderNo) { 
     toast.success("Payment Request successfull")
     reset();
    }
@@ -363,6 +363,7 @@ export default function HomePage() {
           open={showSend}
           onClose={() => setShowSend(false)}
           onConfirm={() => handleSend(OrderTypeEnum.Send)}
+          confirmLoading={isSaveLoading}
           confirmText="Confirm Send"
           title={(
             <div className="space-y-2">
@@ -398,6 +399,7 @@ export default function HomePage() {
           open={showRequest}
           onClose={() => setShowRequest(false)}
           onConfirm={() => handleRequest()}
+          confirmLoading={isSaveLoading}
           confirmText="Confirm Request"
           title={(
             <div className="space-y-2">
