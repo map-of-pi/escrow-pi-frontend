@@ -1,0 +1,34 @@
+[
+  {
+    "_id": "mock-1",
+    "pi_uid": "SAMPLE_PI_UID",
+    "is_cleared": false,
+    "reason": "Welcome to EscrowPi!",
+    "createdAt": "2025-09-25T10:00:00.000Z",
+    "updatedAt": "2025-09-25T10:00:00.000Z"
+  },
+  {
+    "_id": "mock-2",
+    "pi_uid": "SAMPLE_PI_UID",
+    "is_cleared": false,
+    "reason": "Your latest transaction is processing.",
+    "createdAt": "2025-09-25T10:05:00.000Z",
+    "updatedAt": "2025-09-25T10:05:00.000Z"
+  },
+  {
+    "_id": "mock-3",
+    "pi_uid": "SAMPLE_PI_UID",
+    "is_cleared": true,
+    "reason": "Profile update saved successfully.",
+    "createdAt": "2025-09-25T10:10:00.000Z",
+    "updatedAt": "2025-09-25T10:10:00.000Z"
+  },
+  {
+    "_id": "mock-4",
+    "pi_uid": "ANOTHER_UID",
+    "is_cleared": false,
+    "reason": "This belongs to a different user (for filtering demo).",
+    "createdAt": "2025-09-25T10:15:00.000Z",
+    "updatedAt": "2025-09-25T10:15:00.000Z"
+  }
+]

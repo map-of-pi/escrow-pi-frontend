@@ -2,6 +2,7 @@ import './global.css';
 
 import type { Metadata } from 'next';
 import { Lato } from 'next/font/google';
+import Script from 'next/script';
 import React from 'react';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -75,16 +76,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="icon" href="/favicon.ico" />
         <link rel="manifest" href="/site.webmanifest" />
 
-        {/* Google tag (gtag.js) */}
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-0T7BSEVRN9"></script>
-        <script dangerouslySetInnerHTML={{
-          __html: `
+        {/* Google tag (gtag.js) using Next.js Script */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-0T7BSEVRN9"
+          strategy="afterInteractive"
+        />
+        <Script id="gtag-init" strategy="afterInteractive">
+          {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
             gtag('config', 'G-0T7BSEVRN9');
-          `,
-        }} />
+          `}
+        </Script>
       </head>
       <body className={lato.className}>
         <div className="min-h-screen flex flex-col">
