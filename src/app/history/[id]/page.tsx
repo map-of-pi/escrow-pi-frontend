@@ -7,7 +7,6 @@ import { toast } from 'react-toastify';
 import { AppContext } from '@/context/AppContextProvider';
 import { fetchSingleUserOrder, updateOrderStatus } from '@/services/orderApi';
 import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend } from '@/lib';
-import { toast } from 'react-toastify';
 import { addComment } from '@/services/commentApi';
 
 export default function TxDetailsPage() {
