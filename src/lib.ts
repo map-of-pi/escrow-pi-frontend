@@ -9,7 +9,7 @@ export type TxStatus =
   | 'disputed'
   | 'fulfilled'
   | 'expired'
-  | 'completed';
+  | 'released';
 export type Direction = 'send' | 'receive';
 
 export type TxItem = {
@@ -20,7 +20,7 @@ export type TxItem = {
   amount: number;
   status: TxStatus;
   date: string; // ISO
-  notes?: string;
+  auditLog?: string;
   needsPayerResponse?: boolean; // show popup when true and this is a receive where I am payer
 };
 
@@ -33,7 +33,7 @@ export const statusClasses: Record<TxStatus, string> = {
   declined: "bg-gray-50 text-gray-700 border-gray-200",
   disputed: "bg-red-50 text-red-800 border-red-200",
   fulfilled: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  completed: "bg-green-50 text-green-800 border-green-200",
+  released: "bg-green-50 text-green-800 border-green-200",
 };
 
 export const statusLabel: Record<TxStatus, string> = {
@@ -43,7 +43,7 @@ export const statusLabel: Record<TxStatus, string> = {
   declined: "Declined",
   disputed: "Disputed",
   fulfilled: "Fulfilled",
-  completed: "Completed",
+  released: "Released",
   initiated: "Initiated",
   expired: "Expired",
 };
@@ -72,7 +72,7 @@ export const mapOrdersToTxItems = (orders: IOrder[], authUsername: string): TxIt
       amount: order.amount,
       status: order.status as TxStatus,
       date: new Date(order.createdAt).toISOString(),
-      notes: `${order.order_no}`,
+      auditLog: `${order.order_no}`,
     };
   });
 };
