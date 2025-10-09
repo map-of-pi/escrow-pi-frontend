@@ -180,7 +180,7 @@ export default function HomePage() {
   
     const paymentData: PaymentDataType = {
       amount: parseFloat(modalAmount.toString()),
-      memo: `Escrow payment to ${counterparty}`,
+      memo: `Escrow payment between ${currentUser.pi_username} and ${counterparty}`,
       metadata: { 
         orderType: orderType,
         order_no: orderNo
