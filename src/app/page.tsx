@@ -210,7 +210,7 @@ export default function HomePage() {
     setIsSaveLoading(true)
   
     const paymentData: PaymentDataType = {
-      amount: parseFloat(modalAmount.toString()),
+      amount: fees.total,
       memo: `Escrow payment between ${currentUser.pi_username} and ${counterparty}`,
       metadata: { 
         orderType: orderType,
@@ -247,7 +247,7 @@ export default function HomePage() {
             <textarea
               value={counterparty}
               onChange={(e) => setCounterparty(e.target.value)}
-              placeholder="@pioneername"
+              placeholder="@Pioneername (case-sensitive)"
               rows={2}
               className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 shadow-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--default-primary-color)] focus:border-[var(--default-primary-color)]"
             />
