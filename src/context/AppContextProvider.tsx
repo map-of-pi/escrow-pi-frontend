@@ -12,7 +12,6 @@ import axiosClient, { setAuthToken } from '@/config/client';
 import { onIncompletePaymentFound } from '@/config/payment';
 import { AuthResult } from '@/config/pi';
 import { IUser } from '@/types';
-import { toast } from 'react-toastify';
 
 interface IAppContextProps {
   currentUser: IUser | null;
@@ -76,15 +75,11 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
     if (typeof window !== 'undefined' && window.Pi?.initialized) {
       try {
         setIsSigningInUser(true);
-        console.log('>>> [registerUser] Starting Pi authentication...');
         const pioneerAuth: AuthResult = await window.Pi.authenticate([
           'username', 
           'payments', 
           'wallet_address'
         ], onIncompletePaymentFound);
-
-        console.log('>>> [registerUser] Pioneer authentication successful:', pioneerAuth);
-        console.log('>>> [registerUser] accessToken from Pi SDK:', pioneerAuth.accessToken);
 
         // Send accessToken to backend
         const res = await axiosClient.post(
@@ -97,29 +92,23 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
           }
         );
 
-        console.log('>>> [registerUser] Backend response:', res.data);
-
         if (res.status === 200) {
           setAuthToken(res.data?.token);
-          console.log('>>> [registerUser] Axios headers after setAuthToken:', axiosClient.defaults.headers.common);
           setCurrentUser(res.data.user);
           // logger.info('User authenticated successfully.');
         } else {
           setCurrentUser(null);
-          console.warn('>>> [registerUser] User authentication failed.');
           // logger.error('User authentication failed.');
         }
       } catch (error) {
         // logger.error('Error during user registration:', error);
         console.error('>>> [registerUser] Error during user registration:', error);
-        toast.error('Error during user registration.');
       } finally {
         setTimeout(() => setIsSigningInUser(false), 2500);
       }
     } else {
       // logger.error('PI SDK failed to initialize.');
       console.error('>>> [registerUser] PI SDK failed to initialize.');
-      toast.error('PI SDK failed to initialize.');
     }
   };
 
@@ -129,24 +118,19 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
     // logger.info('Attempting to auto-login user.');
     try {
       setIsSigningInUser(true);
-      console.log('>>> [autoLoginUser] Attempting /users/me request...');
-      console.log('>>> [autoLoginUser] Axios headers before /users/me:', axiosClient.defaults.headers.common);
 
       const res = await axiosClient.get('/users/me');
 
       if (res.status === 200) {
-        console.log('>>> [autoLoginUser] Auto-login successful:', res.data.user);
         // logger.info('Auto-login successful.');
         setCurrentUser(res.data.user);
       } else {
         setCurrentUser(null);
-        console.warn('>>> [autoLoginUser] Auto-login failed.');
         // logger.warn('Auto-login failed.');
       }
     } catch (error) {
-      console.warn('>>> [autoLoginUser] Auto-login failed, falling back to Pi authentication:', error);
-      // logger.error('Auto login unresolved; attempting Pi SDK authentication:', error);
       await registerUser();
+
     } finally {
       setTimeout(() => setIsSigningInUser(false), 2500);
     }
@@ -158,11 +142,9 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
       script.src = 'https://sdk.minepi.com/pi-sdk.js';
       script.async = true;
       script.onload = () => {
-        console.log('>>> [loadPiSdk] Pi SDK script loaded.');
         resolve(window.Pi);
       };
       script.onerror = () => {
-        console.error('>>> [loadPiSdk] Failed to load Pi SDK script.');
         reject(new Error('Failed to load Pi SDK'));
       };
       document.head.appendChild(script);
@@ -170,7 +152,6 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
   };
 
   useEffect(() => {
-    // logger.info('AppContextProvider mounted.');
     if (isSigningInUser || currentUser) return;
     
     const nodeEnv = process.env.NODE_ENV as 'development' | 'staging';
@@ -178,12 +159,10 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
     // attempt to load and initialize Pi SDK in parallel
     loadPiSdk()
       .then(Pi => {
-        console.log('>>> [loadPiSdk] Pi SDK loaded:', Pi);
         Pi.init({ version: '2.0', sandbox: nodeEnv === 'development' || nodeEnv === 'staging' });
         return Pi.nativeFeaturesList();
       })
       .then(features => {
-        console.log('>>> [loadPiSdk] Pi native features:', features);
         setAdsSupported(features.includes("ad_network"));
       })
       .catch(err => console.error('>>> [loadPiSdk] Pi SDK load/init error:', err));
