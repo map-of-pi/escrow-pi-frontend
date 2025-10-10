@@ -8,7 +8,7 @@ import NotificationDialog from '@/components/NotificationDialog';
 import { AppContext } from '@/context/AppContextProvider';
 import { payWithPi } from '@/config/payment';
 import { OrderTypeEnum, PaymentDataType } from '@/types';
-import { createOrder, updateUserOrder } from '@/services/orderApi';
+import { createOrder, confirmRequestOrder } from '@/services/orderApi';
 import { getNotifications } from '@/services/notificationApi';
 
 function Splash() {
@@ -21,7 +21,7 @@ function Splash() {
 
 export default function HomePage() {
   // Always start as loading on server and first client render to avoid hydration mismatch
-  const { currentUser, setIsSaveLoading, isSigningInUser } = useContext(AppContext);
+  const { currentUser, setIsSaveLoading, isSaveLoading, isSigningInUser } = useContext(AppContext);
   const [loading, setLoading] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     try {
@@ -42,6 +42,7 @@ export default function HomePage() {
   const [showRequest, setShowRequest] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [orderNo, setOrderNo] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showNotificationPopup, setShowNotificationPopup] = useState(false);
 
   // Decide splash behavior before paint to minimize flash and keep SSR/CSR consistent
@@ -140,16 +141,16 @@ export default function HomePage() {
   }, [amountInput]);
 
   const reset = () => {
+    setIsSaveLoading(false)
     setShowSend(false);
     setShowRequest(false);
     setModalAmount('');
+    setCounterparty('');
+    setAmountInput('1.0');
+    setModalAmount('');
+    setDetails('');
+    setOrderNo('')
   }
-
-  const handleConfirm = (type: OrderTypeEnum) => {
-    // TODO: Integrate with backend to create EscrowPi transaction
-    toast.info(`Demo: ${type === OrderTypeEnum.Send ? 'Sending' : 'Requesting'} ${fees.amt || 0} Pi via EscrowPi (backend pending)`);
-    reset();
-  };
 
   // Validate inputs and open the appropriate modal
   const handleOpen = async (orderType: OrderTypeEnum) => {
@@ -192,8 +193,7 @@ export default function HomePage() {
   }
 
   const onPaymentComplete = async (data:any) => {
-    setIsSaveLoading(false);  
-    toast.success("Payment successfull")
+    toast.success("Payment successfull");
     reset();
   }
   
@@ -210,8 +210,8 @@ export default function HomePage() {
     setIsSaveLoading(true)
   
     const paymentData: PaymentDataType = {
-      amount: 5,
-      memo: `Escrow payment to ${counterparty}`,
+      amount: fees.total,
+      memo: `Escrow payment between ${currentUser.pi_username} and ${counterparty}`,
       metadata: { 
         orderType: orderType,
         order_no: orderNo
@@ -222,16 +222,16 @@ export default function HomePage() {
 
   const handleRequest = async () => {
    if (!currentUser || !orderNo) return
-   const newOrderNo = await updateUserOrder(orderNo);
-   if (newOrderNo) {
-    setIsSaveLoading(false);  
+   setIsSaveLoading(true)
+   const newOrderNo = await confirmRequestOrder(orderNo);
+   if (newOrderNo) { 
     toast.success("Payment Request successfull")
     reset();
    }
 
   }
 
-  if (!mounted) {
+  if (!mounted || isSigningInUser) {
     // Render a minimal stable wrapper on SSR and first client paint
     return (
     <div className="fixed inset-0 z-[999] flex flex-col items-center justify-start pt-24 bg-white">
@@ -247,7 +247,7 @@ export default function HomePage() {
             <textarea
               value={counterparty}
               onChange={(e) => setCounterparty(e.target.value)}
-              placeholder="@pioneername"
+              placeholder="@Pioneername (case-sensitive)"
               rows={2}
               className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 shadow-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--default-primary-color)] focus:border-[var(--default-primary-color)]"
             />
@@ -394,6 +394,7 @@ export default function HomePage() {
           open={showSend}
           onClose={() => setShowSend(false)}
           onConfirm={() => handleSend(OrderTypeEnum.Send)}
+          confirmLoading={isSaveLoading}
           confirmText="Confirm Send"
           title={(
             <div className="space-y-2">
@@ -419,7 +420,7 @@ export default function HomePage() {
               <div className="text-right">{fmt(fees.escrowFee)} pi</div>
 
               <div>Order id:</div>
-              <div className="text-right">{orderNo} pi</div>
+              <div className="text-right">{orderNo}</div>
             </div>
           </div>
         </Modal>
@@ -429,6 +430,7 @@ export default function HomePage() {
           open={showRequest}
           onClose={() => setShowRequest(false)}
           onConfirm={() => handleRequest()}
+          confirmLoading={isSaveLoading}
           confirmText="Confirm Request"
           title={(
             <div className="space-y-2">

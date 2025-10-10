@@ -35,7 +35,7 @@ export const getNotifications = async (
   });
   if (status) params.append('status', status);
 
-  const res = await axiosClient.get(`/notifications/${pi_uid}?${params.toString()}`);
+  const res = await axiosClient.get(`/notifications/?${params.toString()}`);
   if (res.status !== 200) throw new Error('Failed to fetch notifications');
   return res.data;
 };
