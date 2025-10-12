@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useContext, useEffect, useState } from 'react';
-import { FiHelpCircle, FiMenu } from 'react-icons/fi';
+import { FiHelpCircle, FiMenu, FiFileText } from 'react-icons/fi';
 import { IoMdArrowBack, IoMdClose } from 'react-icons/io';
 import { MdHome } from 'react-icons/md';
 import styles from './Navbar.module.css';
@@ -32,6 +32,8 @@ export default function Navbar() {
   const isTxDetails = !!pathname && pathname.startsWith('/history/');
   const isHistoryList = (pathname ?? '') === '/history';
   const backHref = isTxDetails ? '/history' : isHistoryList ? '/?skipSplash=1' : '/?skipSplash=1';
+
+  const apiDocsUrl = `https://escrowpi-doc-${process.env.NEXT_PUBLIC_DOC_ENV}.vercel.app/api-docs_`;
 
   // Determine readiness without touching <body> attributes
   useEffect(() => {
@@ -199,34 +201,50 @@ export default function Navbar() {
           />
           {/* Right drawer */}
           <div
-            className="absolute bg-white right-0 top-0 z-50 p-[1.2rem] h-[calc(100vh-76.19px)] sm:w-[350px] w-[250px] overflow-y-auto shadow-xl border-l"
+            className="absolute bg-white right-0 top-0 z-50 p-[1.2rem] h-[calc(100vh-76.19px)] sm:w-[350px] w-[250px] overflow-y-auto shadow-2xl border-l flex flex-col justify-between"
             role="dialog"
             aria-modal="true"
           >
-            <div className="mb-3 text-center">
-              <h2 className="text-lg font-semibold">{currentUser?.pi_username || 'Menu'}</h2>
+            {/* Top content */}
+            <div>
+              <div className="mb-3 text-center">
+                <h2 className="text-lg font-semibold">{currentUser?.pi_username || 'Menu'}</h2>
+              </div>
+
+              <div className="mb-3">
+                <button
+                  onClick={() => { router.push('/notifications'); setSidebarOpen(false); }}
+                  className="relative w-full px-4 py-3 rounded-md text-base flex items-center justify-center"
+                  style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+                >
+                  <span>See Notifications</span>
+                  {unreadCount > 0 && (
+                    <span
+                      className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold flex items-center justify-center bg-red-600 border-2"
+                      style={{ color: 'var(--default-secondary-color)', borderColor: 'var(--default-secondary-color)' }}
+                      aria-label={`${unreadCount} unread notifications`}
+                    >
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Additional menu items can be added here, matching Map-of-Pi's pattern over time */}
             </div>
 
-            <div className="mb-3">
-              <button
-                onClick={() => { router.push('/notifications'); setSidebarOpen(false); }}
-                className="relative w-full px-4 py-3 rounded-md text-base flex items-center justify-center"
-                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+            {/* Bottom content */}
+            <div className="mb-5">
+              <a
+                href={apiDocsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full rounded-md text-base text-center items-center justify-center flex gap-2 border-primary hover:text-primary transition-colors"
               >
-                <span>See Notifications</span>
-                {unreadCount > 0 && (
-                  <span
-                    className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold flex items-center justify-center bg-red-600 border-2"
-                    style={{ color: 'var(--default-secondary-color)', borderColor: 'var(--default-secondary-color)' }}
-                    aria-label={`${unreadCount} unread notifications`}
-                  >
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
+                <FiFileText size={20} className="flex-shrink-0" />
+                <span className="whitespace-nowrap">API Documentation</span>
+              </a>
             </div>
-
-            {/* Additional menu items can be added here, matching Map-of-Pi's pattern over time */}
           </div>
         </div>
       )}
