@@ -261,7 +261,9 @@ export default function HomePage() {
                 className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 shadow-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--default-primary-color)] focus:border-[var(--default-primary-color)]"
               />
             </div>
-            <div className="mt-12 md:mt-6 text-center relative">
+            {/* Spacer to evenly distribute space above amount */}
+            <div className="flex-1" aria-hidden></div>
+            <div className="text-center relative">
               {(showSend || showRequest) && (
                 <div className="absolute inset-0 z-10 rounded-xl bg-white/80 backdrop-blur-sm"></div>
               )}
@@ -345,7 +347,9 @@ export default function HomePage() {
               </div>
               <div className="text-2xl text-gray-800 -mt-1">Pi</div>
             </div>
-            <div className="mt-auto grid gap-3 max-w-sm mx-auto w-full pb-6">
+            {/* Spacer to evenly distribute space below amount */}
+            <div className="flex-1" aria-hidden></div>
+            <div className="grid gap-3 max-w-sm mx-auto w-full pb-6">
               <button
                 onClick={() => handleOpen(OrderTypeEnum.Send)}
                 className="w-full rounded-xl overflow-hidden appearance-none border-0 shadow-none outline-none focus:outline-none focus:ring-0 active:ring-0"
@@ -357,7 +361,7 @@ export default function HomePage() {
                   alt="Pay With EscrowPi"
                   width={800}
                   height={160}
-                  className="w-full h-11 object-contain pointer-events-none select-none outline-none border-0"
+                  className="w-full h-10 object-contain pointer-events-none select-none outline-none border-0"
                   priority
                 />
               </button>
@@ -373,7 +377,8 @@ export default function HomePage() {
                   alt="Receive With EscrowPi"
                   width={800}
                   height={160}
-                  className="w-full h-11 object-contain pointer-events-none select-none outline-none border-0"
+                  className="w-full h-10 object-contain pointer-events-none select-none outline-none border-0"
+                  priority
                 />
               </button>
 
@@ -383,7 +388,7 @@ export default function HomePage() {
                   alt="My EscrowPi"
                   width={800}
                   height={160}
-                  className="w-full h-11 object-contain pointer-events-none select-none outline-none"
+                  className="w-full h-10 object-contain pointer-events-none select-none outline-none"
                 />
               </Link>
             </div>
