@@ -357,13 +357,13 @@ export default function HomePage() {
                 aria-label="Pay With EscrowPi"
               >
                 <Image
-                src="/pay-with-escrow-pi-button.png"
-                alt="Pay With EscrowPi"
-                width={800}
-                height={160}
-                className="w-full h-10 object-contain pointer-events-none select-none outline-none border-0"
-                priority
-              />
+                  src="/pay-with-escrow-pi-button.png"
+                  alt="Pay With EscrowPi"
+                  width={800}
+                  height={160}
+                  className="w-full h-10 object-contain pointer-events-none select-none outline-none border-0"
+                  priority
+                />
               </button>
 
               <button
@@ -373,22 +373,23 @@ export default function HomePage() {
                 aria-label="Receive With EscrowPi"
               >
                 <Image
-                src="/receive-with-escrow-pi-button.png"
-                alt="Receive With EscrowPi"
-                width={800}
-                height={160}
-                className="w-full h-10 object-contain pointer-events-none select-none outline-none border-0"
-              />
+                  src="/receive-with-escrow-pi-button.png"
+                  alt="Receive With EscrowPi"
+                  width={800}
+                  height={160}
+                  className="w-full h-10 object-contain pointer-events-none select-none outline-none border-0"
+                  priority
+                />
               </button>
 
               <Link href="/history" className="block w-full rounded-xl overflow-hidden appearance-none border-0 shadow-none outline-none focus:outline-none focus:ring-0 active:ring-0" aria-label="My EscrowPi" style={{ WebkitTapHighlightColor: 'transparent' }}>
                 <Image
-                src="/my-escrow-pi-button.png"
-                alt="My EscrowPi"
-                width={800}
-                height={160}
-                className="w-full h-10 object-contain pointer-events-none select-none outline-none"
-              />
+                  src="/my-escrow-pi-button.png"
+                  alt="My EscrowPi"
+                  width={800}
+                  height={160}
+                  className="w-full h-10 object-contain pointer-events-none select-none outline-none"
+                />
               </Link>
             </div>
           </div>
