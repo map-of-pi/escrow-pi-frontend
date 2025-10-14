@@ -171,12 +171,21 @@ export default function HomePage() {
       return;
     }
 
+    // Compute total from the entered base amount so backend stores the total amount
+    const totalFromBase = (base: number) => {
+      const completionStake = Math.max(base * 0.1, 1);
+      const networkFees = 0.03;
+      const escrowFee = Math.max(base * 0.03, 0.1);
+      return base + completionStake + networkFees + escrowFee;
+    };
+    const total = totalFromBase(n);
+
     const order_no = await createOrder(
       { 
         username: counterparty,
         comment: desc,
         orderType: orderType,
-        amount: n
+        amount: total
       }
     )
     
