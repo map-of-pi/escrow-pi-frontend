@@ -153,6 +153,7 @@ export default function TxDetailsPage() {
     setShowDispute(false)
     setShowAccept(false);
     setShowReceived(false);
+    setShowFulfilled(false);
   }
 
   const handleAddComment = async () => {
@@ -326,16 +327,7 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  const ts = new Date().toISOString();
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['cancelled']}.`, ts };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts }] : [...prev, header]);
-                  setTx({ ...tx, status: 'cancelled' });
-                  setShowCancel(false);
-                  toast.info('Action completed successfully');
-                  if (typed) setNewComment('');
-                }}
+                onClick={()=> handleAction('cancelled')}
               >
                 Confirm
               </button>
@@ -463,16 +455,7 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['fulfilled']}.`, ts: new Date().toISOString() };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'fulfilled' });
-                  setShowFulfilled(false);
-                  setActionBanner('Action completed successfully');
-                  if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
-                }}
+                onClick={() => handleAction('fulfilled')}
               >
                 Confirm
               </button>
@@ -842,11 +825,7 @@ export default function TxDetailsPage() {
                             className={`px-4 h-12 rounded-full text-sm font-semibold ${tx.status === 'fulfilled' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                             onClick={() => {
                               if (tx.status !== 'fulfilled') return;
-                              const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
-                              setComments((prev) => [...prev, header]);
-                              setTx({ ...tx, status: 'released' });
-                              setActionBanner('Action completed successfully');
-                              setTimeout(() => setActionBanner(''), 2000);
+                              handleAction('released')
                             }}
                           >
                             Mark Complete
@@ -891,16 +870,7 @@ export default function TxDetailsPage() {
             <div className="pt-2">
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold bg-red-100 text-red-700 border border-red-200"
-                onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['declined']}.`, ts: new Date().toISOString() };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'declined', needsPayerResponse: false });
-                  setShowReject(false);
-                  setActionBanner('Action completed successfully');
-                  if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
-                }}
+                onClick={() => handleAction('declined')}
               >
                 Confirm Reject
               </button>
