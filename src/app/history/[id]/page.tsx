@@ -279,14 +279,8 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const ts = new Date().toISOString();
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['cancelled']}.`, ts };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts }] : [...prev, header]);
-                  setTx({ ...tx, status: 'cancelled' });
                   setShowCancel(false);
-                  toast.info('Action completed successfully');
-                  if (typed) setNewComment('');
+                  handleAction('cancelled');
                 }}
               >
                 Confirm
@@ -350,14 +344,8 @@ export default function TxDetailsPage() {
                     className="w-full py-2 rounded-lg text-sm font-semibold"
                     style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                     onClick={() => {
-                      const percent = (lastProposedPercent ?? refundPercent);
-                      const accepted: Comment = { author: myUsername, text: `User ${myUsername} accepted proposed dispute resolution refund of ${fmt(percent)}%.`, ts: new Date().toISOString() };
-                      const completed: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
-                      setComments((prev) => [...prev, accepted, completed]);
-                      setTx({ ...tx, status: 'released' });
                       setShowAcceptProposal(false);
-                      setActionBanner('Action completed successfully');
-                      setTimeout(() => setActionBanner(''), 2000);
+                      handleAction('released');
                     }}
                   >
                     Confirm
@@ -392,12 +380,8 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
-                  setComments((prev) => [...prev, header]);
-                  setTx({ ...tx, status: 'released' });
                   setShowReceived(false);
-                  setActionBanner('Action completed successfully');
-                  setTimeout(() => setActionBanner(''), 2000);
+                  handleAction('released');
                 }}
               >
                 Confirm
@@ -749,7 +733,7 @@ export default function TxDetailsPage() {
                       </div>
                     );
                   }
-                  // UC6: Payer at Paid (paid): message + Dispute (single-button layout)
+                  // UC6a: Payer at Paid (paid): message + Cancel (single-button layout)
                   if (tx.myRole === 'payer' && tx.status === 'paid') {
                     return (
                       <div className="flex items-center gap-2 h-full">
@@ -758,9 +742,9 @@ export default function TxDetailsPage() {
                         </div>
                         <button
                           className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
-                          onClick={() => setShowDispute(true)}
+                          onClick={() => setShowCancel(true)}
                         >
-                          Dispute
+                          Cancel
                         </button>
                       </div>
                     );
@@ -802,11 +786,7 @@ export default function TxDetailsPage() {
                             className={`px-4 h-12 rounded-full text-sm font-semibold ${tx.status === 'fulfilled' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                             onClick={() => {
                               if (tx.status !== 'fulfilled') return;
-                              const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
-                              setComments((prev) => [...prev, header]);
-                              setTx({ ...tx, status: 'released' });
-                              setActionBanner('Action completed successfully');
-                              setTimeout(() => setActionBanner(''), 2000);
+                              handleAction('released');
                             }}
                           >
                             Mark Complete
