@@ -152,6 +152,7 @@ export default function TxDetailsPage() {
   const reset = () => {
     setShowDispute(false)
     setShowAccept(false);
+    setShowReceived(false);
   }
 
   const handleAddComment = async () => {
@@ -186,9 +187,10 @@ export default function TxDetailsPage() {
     if (newComment) {
       handleAddComment();
     }
-    if (tx?.status==='cancelled')
+    if (tx?.status) {
       setShowCancel(false);
       setActionBanner('Action completed successfully');
+    }
   }
 
   const handleAction = async (newStatus: TxStatus) => {
@@ -438,12 +440,7 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
-                  setComments((prev) => [...prev, header]);
-                  setTx({ ...tx, status: 'released' });
-                  setShowReceived(false);
-                  setActionBanner('Action completed successfully');
-                  setTimeout(() => setActionBanner(''), 2000);
+                  handleAction('released')
                 }}
               >
                 Confirm
