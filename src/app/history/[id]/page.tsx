@@ -430,14 +430,8 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['cancelled']}.`, ts: new Date().toISOString() };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'cancelled' });
                   setShowCancel(false);
-                  setActionBanner('Action completed successfully');
-                  if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
+                  handleAction('cancelled');
                 }}
               >
                 Confirm Cancel
