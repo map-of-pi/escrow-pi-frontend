@@ -8,6 +8,8 @@ import { fetchSingleUserOrder, updateOrderStatus } from '@/services/orderApi';
 import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend } from '@/lib';
 import { addComment } from '@/services/commentApi';
 import { toast } from 'react-toastify';
+import { IComment, IOrder, OrderTypeEnum, PaymentDataType } from '@/types';
+import { payWithPi } from '@/config/payment';
 
 export default function TxDetailsPage() {
   const router = useRouter();
@@ -63,6 +65,7 @@ export default function TxDetailsPage() {
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const previewContentRef = useRef<HTMLDivElement | null>(null);
   const [offsetPx, setOffsetPx] = useState(0);
+  const [orderNo, setOrderNo] = useState<string>("");
 
   useEffect(() => {
     const measure = () => {
@@ -125,12 +128,14 @@ export default function TxDetailsPage() {
 
   useEffect(() => {
     const loadOrder = async () => {
+      // await a2uTrigger()
       try {
         if (!currentUser?.pi_username) return;
         const fetchedOrder = await fetchSingleUserOrder(id);
         if (!fetchedOrder) {
-          return setTx(undefined)
+          return setTx(undefined);
         }
+        
         const txItem = mapOrdersToTxItems([fetchedOrder.order], currentUser.pi_username);
         setTx(txItem[0] ?? undefined);
         setComments(mapCommentsToFrontend(fetchedOrder.comments, currentUser.pi_username))
@@ -143,28 +148,10 @@ export default function TxDetailsPage() {
     loadOrder();
   }, [currentUser, id]);
 
-  const handleAction = async (newStatus: TxStatus) => {
-    if (tx?.status === newStatus) return
-    try {
-      const result = await updateOrderStatus(id, newStatus);
-      if (!result?.order || !currentUser?.pi_username){
-        toast.warn('can not find order');
-        return
-      }
-      const txItem = mapOrdersToTxItems([result.order], currentUser.pi_username);
-      setTx(txItem[0]);
-      setComments((prev) => [...prev, mapCommentToFrontend( result.comment, currentUser.pi_username),]);
-      setShowDispute(false)
-
-      if (newComment) {
-        handleAddComment();
-      }
-
-    } catch (error:any) {
-      toast.error('error updating order')
-    } finally {
-      setLoading(false);
-    }
+  
+  const reset = () => {
+    setShowDispute(false)
+    setShowAccept(false);
   }
 
   const handleAddComment = async () => {
@@ -190,6 +177,51 @@ export default function TxDetailsPage() {
     }
   }
 
+  const updateUI = (result:{order:IOrder, comment:IComment}) => {
+    const txItem = mapOrdersToTxItems([result.order], currentUser?.pi_username as string);
+    setTx(txItem[0]);
+    setComments(
+      (prev) => [...prev, mapCommentToFrontend( result.comment, currentUser?.pi_username as  string),]
+    );
+    if (newComment) {
+      handleAddComment();
+    }
+    if (tx?.status==='cancelled')
+      setShowCancel(false);
+      setActionBanner('Action completed successfully');
+  }
+
+  const handleAction = async (newStatus: TxStatus) => {
+    if (tx?.status === newStatus) return
+    try {
+      const result = await updateOrderStatus(id, newStatus);
+      if (!result?.order || !currentUser?.pi_username){
+        toast.warn('can not find order');
+        return
+      }
+      updateUI(result);     
+
+    } catch (error:any) {
+      toast.error('error updating order')
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const onPaymentComplete = async (data:any) => {
+    updateUI(data)
+    setActionBanner('Action completed successfully');
+    setTimeout(() => setActionBanner(''), 2000)
+    toast.success("Payment successfull");
+    reset();
+  }
+  
+  const onPaymentError = (error: Error) => {
+    toast.error('Payment error');
+    // setIsSaveLoading(false);
+  }
+    
+
   if (!tx) {
     return (
       <div className="space-y-4">
@@ -197,6 +229,24 @@ export default function TxDetailsPage() {
         <button className="px-4 py-2 rounded-lg border" onClick={() => router.push('/history')}>Back to My EscrowPi</button>
       </div>
     );
+  }
+
+  const handleSend = async () => {
+    if (!currentUser?.pi_uid || !tx || tx?.amount<=0) {
+      toast.error('SCREEN.MEMBERSHIP.VALIDATION.USER_NOT_LOGGED_IN_PAYMENT_MESSAGE')
+      return 
+    }
+    // setIsSaveLoading(true)
+  
+    const paymentData: PaymentDataType = {
+      amount: parseFloat(tx?.amount.toString()),
+      memo: `Escrow payment between ${currentUser.pi_username} and ${tx?.counterparty}`,
+      metadata: { 
+        orderType: OrderTypeEnum.Send,
+        order_no: id
+      },        
+    };
+    await payWithPi(paymentData, onPaymentComplete, onPaymentError);
   }
 
   const arrow = tx.myRole === 'payer' ? 'You →' : 'You ←';
@@ -447,16 +497,7 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['cancelled']}.`, ts: new Date().toISOString() };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'cancelled' });
-                  setShowCancel(false);
-                  setActionBanner('Action completed successfully');
-                  if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
-                }}
+                onClick={() => handleAction('cancelled')}
               >
                 Confirm Cancel
               </button>
@@ -696,7 +737,7 @@ export default function TxDetailsPage() {
                         <div className="flex-1 text-center px-3 text-[13px] md:text-[14px] font-medium text-gray-800">Waiting for Payer to accept Payee request for pi transfer</div>
                         <button
                           className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[#f0b37e] border border-[#d9b07a] hover:brightness-110 active:brightness-105 transition"
-                          onClick={() => setShowAccept(true)}
+                          onClick={() => setShowAccept(true)} 
                         >
                           Accept
                         </button>
@@ -894,16 +935,7 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['paid']}.`, ts: new Date().toISOString() };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: 'You', text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'paid', needsPayerResponse: false });
-                  setShowAccept(false);
-                  setActionBanner('Action completed successfully');
-                  if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
-                }}
+                onClick={() =>handleSend()}
               >
                 Confirm Accept
               </button>
