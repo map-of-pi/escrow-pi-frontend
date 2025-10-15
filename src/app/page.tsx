@@ -4,10 +4,12 @@ import Image from 'next/image';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { toast } from 'react-toastify';
+import NotificationDialog from '@/components/NotificationDialog';
 import { AppContext } from '@/context/AppContextProvider';
 import { payWithPi } from '@/config/payment';
 import { OrderTypeEnum, PaymentDataType } from '@/types';
-import { createOrder, updateUserOrder } from '@/services/orderApi';
+import { createOrder, confirmRequestOrder } from '@/services/orderApi';
+import { getNotifications } from '@/services/notificationApi';
 
 function Splash() {
   return (
@@ -19,7 +21,7 @@ function Splash() {
 
 export default function HomePage() {
   // Always start as loading on server and first client render to avoid hydration mismatch
-  const { currentUser, setIsSaveLoading, isSigningInUser } = useContext(AppContext);
+  const { currentUser, setIsSaveLoading, isSaveLoading, isSigningInUser } = useContext(AppContext);
   const [loading, setLoading] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     try {
@@ -40,6 +42,8 @@ export default function HomePage() {
   const [showRequest, setShowRequest] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [orderNo, setOrderNo] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [showNotificationPopup, setShowNotificationPopup] = useState(false);
 
   // Decide splash behavior before paint to minimize flash and keep SSR/CSR consistent
   useLayoutEffect(() => {
@@ -72,6 +76,34 @@ export default function HomePage() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Check for uncleared notifications and show dialog once per session
+  useEffect(() => {
+    const checkUncleared = async () => {
+      try {
+        if (!currentUser?.pi_uid) { setShowNotificationPopup(false); return; }
+        // If user navigated back to home from internal pages, do not show popup
+        const cameFromInternal = typeof window !== 'undefined' && window.sessionStorage.getItem('escrowpi:cameFromInternalNav') === '1';
+        if (cameFromInternal) { setShowNotificationPopup(false); return; }
+        // Avoid re-showing within this session
+        const hasShown = typeof window !== 'undefined' && window.sessionStorage.getItem('escrowpi:notificationShown') === '1';
+        if (hasShown) { setShowNotificationPopup(false); return; }
+        const res = await getNotifications({ pi_uid: currentUser.pi_uid, skip: 0, limit: 0, status: 'uncleared' });
+        if (Array.isArray(res) && res.length > 0) {
+          setShowNotificationPopup(true);
+        } else {
+          setShowNotificationPopup(false);
+        }
+      } catch {
+        setShowNotificationPopup(false);
+      }
+    };
+
+    // Only check after splash is gone to avoid stacking overlays
+    if (!loading) {
+      checkUncleared();
+    }
+  }, [currentUser?.pi_uid, loading]);
 
   // No longer manipulating body attributes; Navbar listens for 'escrowpi:ready'
 
@@ -109,16 +141,16 @@ export default function HomePage() {
   }, [amountInput]);
 
   const reset = () => {
+    setIsSaveLoading(false)
     setShowSend(false);
     setShowRequest(false);
     setModalAmount('');
+    setCounterparty('');
+    setAmountInput('1.0');
+    setModalAmount('');
+    setDetails('');
+    setOrderNo('')
   }
-
-  const handleConfirm = (type: OrderTypeEnum) => {
-    // TODO: Integrate with backend to create EscrowPi transaction
-    toast.info(`Demo: ${type === OrderTypeEnum.Send ? 'Sending' : 'Requesting'} ${fees.amt || 0} Pi via EscrowPi (backend pending)`);
-    reset();
-  };
 
   // Validate inputs and open the appropriate modal
   const handleOpen = async (orderType: OrderTypeEnum) => {
@@ -139,30 +171,15 @@ export default function HomePage() {
       return;
     }
 
-    const order_no = await createOrder(
-      { 
-        username: counterparty,
-        comment: desc,
-        orderType: orderType,
-        amount: n
-      }
-    )
-    
-    if (order_no) {
-      setModalAmount(n);
-      setOrderNo(order_no);
-      toast.success(`Order created successfully. New order with ${order_no}.`);
-      if (orderType === OrderTypeEnum.Send) setShowSend(true);
-      else setShowRequest(true);
-
-    } else {
-      toast.error('order creation failed')
-    };
+    // Only open the modal; create order on confirm
+    setModalAmount(n);
+    setOrderNo("");
+    if (orderType === OrderTypeEnum.Send) setShowSend(true);
+    else setShowRequest(true);
   }
 
   const onPaymentComplete = async (data:any) => {
-    setIsSaveLoading(false);  
-    toast.success("Payment successfull")
+    toast.success("Payment successfull");
     reset();
   }
   
@@ -172,35 +189,67 @@ export default function HomePage() {
   }
   
   const handleSend = async (orderType: OrderTypeEnum) => {
-    if (!currentUser?.pi_uid || !orderNo) {
+    if (!currentUser?.pi_uid) {
       toast.error('SCREEN.MEMBERSHIP.VALIDATION.USER_NOT_LOGGED_IN_PAYMENT_MESSAGE')
       return 
     }
     setIsSaveLoading(true)
-  
+
+    // Create order with status initiated; store total amount
+    const total = fees.total;
+    const order_no = await createOrder({ 
+      username: counterparty,
+      comment: details.trim(),
+      orderType: orderType,
+      amount: total
+    });
+    if (!order_no) {
+      setIsSaveLoading(false);
+      toast.error('order creation failed')
+      return;
+    }
+    setOrderNo(order_no);
+
     const paymentData: PaymentDataType = {
-      amount: 5,
-      memo: `Escrow payment to ${counterparty}`,
+      amount: total,
+      memo: `Escrow payment between ${currentUser.pi_username} and ${counterparty}`,
       metadata: { 
         orderType: orderType,
-        order_no: orderNo
+        order_no: order_no
       },        
     };
     await payWithPi(paymentData, onPaymentComplete, onPaymentError);
   }
 
   const handleRequest = async () => {
-   if (!currentUser || !orderNo) return
-   const newOrderNo = await updateUserOrder(orderNo);
-   if (newOrderNo) {
-    setIsSaveLoading(false);  
-    toast.success("Payment Request successfull")
-    reset();
-   }
-
+    if (!currentUser) return
+    setIsSaveLoading(true)
+    // Create order with status initiated; store total amount
+    const total = fees.total;
+    const order_no = await createOrder({ 
+      username: counterparty,
+      comment: details.trim(),
+      orderType: OrderTypeEnum.Request,
+      amount: total
+    });
+    if (!order_no) {
+      setIsSaveLoading(false);
+      toast.error('order creation failed')
+      return;
+    }
+    setOrderNo(order_no);
+    // Mark as requested
+    const newOrderNo = await confirmRequestOrder(order_no);
+    if (newOrderNo) { 
+      toast.success("Payment Request successfull")
+      reset();
+    } else {
+      setIsSaveLoading(false);
+      toast.error('failed to confirm request');
+    }
   }
 
-  if (!mounted) {
+  if (!mounted || isSigningInUser) {
     // Render a minimal stable wrapper on SSR and first client paint
     return (
     <div className="fixed inset-0 z-[999] flex flex-col items-center justify-start pt-24 bg-white">
@@ -216,7 +265,7 @@ export default function HomePage() {
             <textarea
               value={counterparty}
               onChange={(e) => setCounterparty(e.target.value)}
-              placeholder="@pioneername"
+              placeholder="@Pioneername (case-sensitive)"
               rows={2}
               className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 shadow-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--default-primary-color)] focus:border-[var(--default-primary-color)]"
             />
@@ -230,7 +279,9 @@ export default function HomePage() {
                 className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 shadow-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--default-primary-color)] focus:border-[var(--default-primary-color)]"
               />
             </div>
-            <div className="mt-12 md:mt-6 text-center relative">
+            {/* Spacer to evenly distribute space above amount */}
+            <div className="flex-1" aria-hidden></div>
+            <div className="text-center relative">
               {(showSend || showRequest) && (
                 <div className="absolute inset-0 z-10 rounded-xl bg-white/80 backdrop-blur-sm"></div>
               )}
@@ -314,7 +365,9 @@ export default function HomePage() {
               </div>
               <div className="text-2xl text-gray-800 -mt-1">Pi</div>
             </div>
-            <div className="mt-auto grid gap-3 max-w-sm mx-auto w-full pb-6">
+            {/* Spacer to evenly distribute space below amount */}
+            <div className="flex-1" aria-hidden></div>
+            <div className="grid gap-3 max-w-sm mx-auto w-full pb-6">
               <button
                 onClick={() => handleOpen(OrderTypeEnum.Send)}
                 className="w-full rounded-xl overflow-hidden appearance-none border-0 shadow-none outline-none focus:outline-none focus:ring-0 active:ring-0"
@@ -326,7 +379,7 @@ export default function HomePage() {
                   alt="Pay With EscrowPi"
                   width={800}
                   height={160}
-                  className="w-full h-11 object-contain pointer-events-none select-none outline-none border-0"
+                  className="w-full h-10 object-contain pointer-events-none select-none outline-none border-0"
                   priority
                 />
               </button>
@@ -342,7 +395,8 @@ export default function HomePage() {
                   alt="Receive With EscrowPi"
                   width={800}
                   height={160}
-                  className="w-full h-11 object-contain pointer-events-none select-none outline-none border-0"
+                  className="w-full h-10 object-contain pointer-events-none select-none outline-none border-0"
+                  priority
                 />
               </button>
 
@@ -352,7 +406,7 @@ export default function HomePage() {
                   alt="My EscrowPi"
                   width={800}
                   height={160}
-                  className="w-full h-11 object-contain pointer-events-none select-none outline-none"
+                  className="w-full h-10 object-contain pointer-events-none select-none outline-none"
                 />
               </Link>
             </div>
@@ -363,6 +417,7 @@ export default function HomePage() {
           open={showSend}
           onClose={() => setShowSend(false)}
           onConfirm={() => handleSend(OrderTypeEnum.Send)}
+          confirmLoading={isSaveLoading}
           confirmText="Confirm Send"
           title={(
             <div className="space-y-2">
@@ -387,8 +442,6 @@ export default function HomePage() {
               <div>EscrowPi fee:</div>
               <div className="text-right">{fmt(fees.escrowFee)} pi</div>
 
-              <div>Order id:</div>
-              <div className="text-right">{orderNo} pi</div>
             </div>
           </div>
         </Modal>
@@ -398,6 +451,7 @@ export default function HomePage() {
           open={showRequest}
           onClose={() => setShowRequest(false)}
           onConfirm={() => handleRequest()}
+          confirmLoading={isSaveLoading}
           confirmText="Confirm Request"
           title={(
             <div className="space-y-2">
@@ -421,12 +475,19 @@ export default function HomePage() {
 
               <div>EscrowPi fee:</div>
               <div className="text-right">{fmt(fees.escrowFee)}</div>
-
-              <div>Order id:</div>
-              <div className="text-right">{orderNo}</div>
             </div>
           </div>
         </Modal>
+
+        {/* Notification popup like Map-of-Pi */}
+        {!loading && showNotificationPopup && (
+          <NotificationDialog
+            message="You have notifications"
+            url="/notifications"
+            onClose={() => setShowNotificationPopup(false)}
+            setShowDialog={setShowNotificationPopup}
+          />
+        )}
       </>
     </div>
   );

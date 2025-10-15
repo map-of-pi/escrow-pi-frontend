@@ -9,9 +9,10 @@ type ModalProps = {
   onConfirm?: () => void;
   confirmText?: string;
   fullScreen?: boolean;
+  confirmLoading?: boolean
 };
 
-export default function Modal({ open, title, children, onClose, onConfirm, confirmText = "Confirm", fullScreen = false }: ModalProps) {
+export default function Modal({ open, title, children, onClose, onConfirm, confirmLoading, confirmText = "Confirm", fullScreen = false }: ModalProps) {
   if (!open) return null;
   return (
     <div className={fullScreen ? "fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-0" : "fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center"}>
@@ -51,8 +52,8 @@ export default function Modal({ open, title, children, onClose, onConfirm, confi
           <div className="mt-3">
             <button
               onClick={onConfirm}
-              className="w-full py-3 rounded-xl font-semibold"
-              style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+              className={`w-full py-3 rounded-xl font-semibold ${confirmLoading ? 'bg-[var(--default-tertiary-color)]': 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]'}`}
+              disabled={confirmLoading ? confirmLoading : false}
             >
               {confirmText}
             </button>
