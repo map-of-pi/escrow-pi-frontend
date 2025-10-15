@@ -171,34 +171,11 @@ export default function HomePage() {
       return;
     }
 
-    // Compute total from the entered base amount so backend stores the total amount
-    const totalFromBase = (base: number) => {
-      const completionStake = Math.max(base * 0.1, 1);
-      const networkFees = 0.03;
-      const escrowFee = Math.max(base * 0.03, 0.1);
-      return base + completionStake + networkFees + escrowFee;
-    };
-    const total = totalFromBase(n);
-
-    const order_no = await createOrder(
-      { 
-        username: counterparty,
-        comment: desc,
-        orderType: orderType,
-        amount: total
-      }
-    )
-    
-    if (order_no) {
-      setModalAmount(n);
-      setOrderNo(order_no);
-      toast.success(`Order created successfully. New order with ${order_no}.`);
-      if (orderType === OrderTypeEnum.Send) setShowSend(true);
-      else setShowRequest(true);
-
-    } else {
-      toast.error('order creation failed')
-    };
+    // Only open the modal; create order on confirm
+    setModalAmount(n);
+    setOrderNo("");
+    if (orderType === OrderTypeEnum.Send) setShowSend(true);
+    else setShowRequest(true);
   }
 
   const onPaymentComplete = async (data:any) => {
@@ -212,32 +189,64 @@ export default function HomePage() {
   }
   
   const handleSend = async (orderType: OrderTypeEnum) => {
-    if (!currentUser?.pi_uid || !orderNo) {
+    if (!currentUser?.pi_uid) {
       toast.error('SCREEN.MEMBERSHIP.VALIDATION.USER_NOT_LOGGED_IN_PAYMENT_MESSAGE')
       return 
     }
     setIsSaveLoading(true)
-  
+
+    // Create order with status initiated; store total amount
+    const total = fees.total;
+    const order_no = await createOrder({ 
+      username: counterparty,
+      comment: details.trim(),
+      orderType: orderType,
+      amount: total
+    });
+    if (!order_no) {
+      setIsSaveLoading(false);
+      toast.error('order creation failed')
+      return;
+    }
+    setOrderNo(order_no);
+
     const paymentData: PaymentDataType = {
-      amount: fees.total,
+      amount: total,
       memo: `Escrow payment between ${currentUser.pi_username} and ${counterparty}`,
       metadata: { 
         orderType: orderType,
-        order_no: orderNo
+        order_no: order_no
       },        
     };
     await payWithPi(paymentData, onPaymentComplete, onPaymentError);
   }
 
   const handleRequest = async () => {
-   if (!currentUser || !orderNo) return
-   setIsSaveLoading(true)
-   const newOrderNo = await confirmRequestOrder(orderNo);
-   if (newOrderNo) { 
-    toast.success("Payment Request successfull")
-    reset();
-   }
-
+    if (!currentUser) return
+    setIsSaveLoading(true)
+    // Create order with status initiated; store total amount
+    const total = fees.total;
+    const order_no = await createOrder({ 
+      username: counterparty,
+      comment: details.trim(),
+      orderType: OrderTypeEnum.Request,
+      amount: total
+    });
+    if (!order_no) {
+      setIsSaveLoading(false);
+      toast.error('order creation failed')
+      return;
+    }
+    setOrderNo(order_no);
+    // Mark as requested
+    const newOrderNo = await confirmRequestOrder(order_no);
+    if (newOrderNo) { 
+      toast.success("Payment Request successfull")
+      reset();
+    } else {
+      setIsSaveLoading(false);
+      toast.error('failed to confirm request');
+    }
   }
 
   if (!mounted || isSigningInUser) {
@@ -433,8 +442,6 @@ export default function HomePage() {
               <div>EscrowPi fee:</div>
               <div className="text-right">{fmt(fees.escrowFee)} pi</div>
 
-              <div>Order id:</div>
-              <div className="text-right">{orderNo}</div>
             </div>
           </div>
         </Modal>
@@ -468,9 +475,6 @@ export default function HomePage() {
 
               <div>EscrowPi fee:</div>
               <div className="text-right">{fmt(fees.escrowFee)}</div>
-
-              <div>Order id:</div>
-              <div className="text-right">{orderNo}</div>
             </div>
           </div>
         </Modal>
