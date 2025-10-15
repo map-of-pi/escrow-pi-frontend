@@ -10,7 +10,6 @@ import { addComment } from '@/services/commentApi';
 import { payWithPi } from '@/config/payment';
 import { toast } from 'react-toastify';
 import { IComment, IOrder, OrderTypeEnum, PaymentDataType } from '@/types';
-import { payWithPi } from '@/config/payment';
 
 export default function TxDetailsPage() {
   const router = useRouter();
