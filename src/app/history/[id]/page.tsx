@@ -190,7 +190,6 @@ export default function TxDetailsPage() {
     }
     if (tx?.status) {
       setShowCancel(false);
-      toast.success(`Status updated to ${statusLabel[newStatus]}`);
     }
   }
 
@@ -203,7 +202,8 @@ export default function TxDetailsPage() {
         return
       }
       updateUI(result);     
-
+      toast.success(`Status updated to ${statusLabel[newStatus]}`);
+      
     } catch (error:any) {
       toast.error('error updating order')
     } finally {
