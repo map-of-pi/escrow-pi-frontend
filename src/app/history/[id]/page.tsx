@@ -9,6 +9,7 @@ import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCo
 import { addComment } from '@/services/commentApi';
 import { payWithPi } from '@/config/payment';
 import { toast } from 'react-toastify';
+import { IComment, IOrder, OrderTypeEnum, PaymentDataType } from '@/types';
 
 export default function TxDetailsPage() {
   const router = useRouter();
@@ -64,6 +65,7 @@ export default function TxDetailsPage() {
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const previewContentRef = useRef<HTMLDivElement | null>(null);
   const [offsetPx, setOffsetPx] = useState(0);
+  const [orderNo, setOrderNo] = useState<string>("");
 
   useEffect(() => {
     const measure = () => {
@@ -126,12 +128,14 @@ export default function TxDetailsPage() {
 
   useEffect(() => {
     const loadOrder = async () => {
+      // await a2uTrigger()
       try {
         if (!currentUser?.pi_username) return;
         const fetchedOrder = await fetchSingleUserOrder(id);
         if (!fetchedOrder) {
-          return setTx(undefined)
+          return setTx(undefined);
         }
+        
         const txItem = mapOrdersToTxItems([fetchedOrder.order], currentUser.pi_username);
         setTx(txItem[0] ?? undefined);
         setComments(mapCommentsToFrontend(fetchedOrder.comments, currentUser.pi_username))
@@ -143,6 +147,51 @@ export default function TxDetailsPage() {
     };
     loadOrder();
   }, [currentUser, id]);
+
+  
+  const reset = () => {
+    setShowDispute(false)
+    setShowAccept(false);
+    setShowReceived(false);
+    setShowFulfilled(false);
+  }
+
+  const handleAddComment = async () => {
+    try {
+      if (!newComment || !currentUser?.pi_username){
+        toast.warn('can not add comment');
+        return
+      }
+
+      const addedComment = await addComment({order_no: id, description: newComment.trim()});
+      if (!addedComment || !currentUser?.pi_username){
+        toast.warn('can not add comment');
+        return
+      }
+
+      setComments((prev) => [...prev, mapCommentToFrontend( addedComment, currentUser.pi_username),]);
+      setNewComment('');
+
+    } catch (error:any) {
+      toast.error('error adding new comment')
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const updateUI = (result:{order:IOrder, comment:IComment}) => {
+    const txItem = mapOrdersToTxItems([result.order], currentUser?.pi_username as string);
+    setTx(txItem[0]);
+    setComments(
+      (prev) => [...prev, mapCommentToFrontend( result.comment, currentUser?.pi_username as  string),]
+    );
+    if (newComment) {
+      handleAddComment();
+    }
+    if (tx?.status) {
+      setShowCancel(false);
+    }
+  }
 
   const handleAction = async (newStatus: TxStatus) => {
     if (tx?.status === newStatus) return
@@ -170,29 +219,20 @@ export default function TxDetailsPage() {
       setLoading(false);
     }
   }
-
-  const handleAddComment = async () => {
-    try {
-      if (!newComment || !currentUser?.pi_username){
-        toast.warn('can not add comment');
-        return
-      }
-
-      const addedComment = await addComment({order_no: id, description: newComment.trim()});
-      if (!addedComment || !currentUser?.pi_username){
-        toast.warn('can not add comment');
-        return
-      }
-
-      setComments((prev) => [...prev, mapCommentToFrontend( addedComment, currentUser.pi_username),]);
-      setNewComment('');
-
-    } catch (error:any) {
-      toast.error('error adding new comment')
-    } finally {
-      setLoading(false);
-    }
+  
+  const onPaymentComplete = async (data:any) => {
+    updateUI(data)
+    setActionBanner('Action completed successfully');
+    setTimeout(() => setActionBanner(''), 2000)
+    toast.success("Payment successfull");
+    reset();
   }
+  
+  const onPaymentError = (error: Error) => {
+    toast.error('Payment error');
+    // setIsSaveLoading(false);
+  }
+    
 
   if (!tx) {
     return (
@@ -201,6 +241,24 @@ export default function TxDetailsPage() {
         <button className="px-4 py-2 rounded-lg border" onClick={() => router.push('/history')}>Back to My EscrowPi</button>
       </div>
     );
+  }
+
+  const handleSend = async () => {
+    if (!currentUser?.pi_uid || !tx || tx?.amount<=0) {
+      toast.error('SCREEN.MEMBERSHIP.VALIDATION.USER_NOT_LOGGED_IN_PAYMENT_MESSAGE')
+      return 
+    }
+    // setIsSaveLoading(true)
+  
+    const paymentData: PaymentDataType = {
+      amount: parseFloat(tx?.amount.toString()),
+      memo: `Escrow payment between ${currentUser.pi_username} and ${tx?.counterparty}`,
+      metadata: { 
+        orderType: OrderTypeEnum.Send,
+        order_no: id
+      },        
+    };
+    await payWithPi(paymentData, onPaymentComplete, onPaymentError);
   }
 
   const arrow = tx.myRole === 'payer' ? 'You →' : 'You ←';
@@ -672,7 +730,7 @@ export default function TxDetailsPage() {
                         <div className="flex-1 text-center px-3 text-[13px] md:text-[14px] font-medium text-gray-800">Waiting for Payer to accept Payee request for pi transfer</div>
                         <button
                           className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[#f0b37e] border border-[#d9b07a] hover:brightness-110 active:brightness-105 transition"
-                          onClick={() => setShowAccept(true)}
+                          onClick={() => setShowAccept(true)} 
                         >
                           Accept
                         </button>
