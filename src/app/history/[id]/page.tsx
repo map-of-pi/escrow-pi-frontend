@@ -316,6 +316,31 @@ export default function TxDetailsPage() {
         </Modal>
       )}
 
+      {/* UC0: Cancel popup (any transactions at initiated) */}
+      {tx.status === 'initiated' && (
+        <Modal
+          open={showCancel}
+          onClose={() => setShowCancel(false)}
+          title={<div className="font-semibold text-center">Confirm you wish to cancel the initiated transaction</div>}
+        >
+          <div className="space-y-2 text-sm">
+            <div className="text-center text-gray-700">This will cancel the initiated transaction.</div>
+            <div className="pt-2">
+              <button
+                className="w-full py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
+                onClick={() => {
+                  setShowCancel(false);
+                  handleAction('cancelled');
+                }}
+              >
+                Confirm Cancel
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* UC6a: Cancel popup (payer at paid) */}
       {tx.myRole === 'payer' && tx.status === 'paid' && (
         <Modal
@@ -781,6 +806,22 @@ export default function TxDetailsPage() {
                           onClick={() => setShowDispute(true)}
                         >
                           Dispute
+                        </button>
+                      </div>
+                    );
+                  }
+                  // UC0: Any at Initiated: message + Cancel (single-button layout)
+                  if (tx.status === 'initiated') {
+                    return (
+                      <div className="flex items-center gap-2 h-full">
+                        <div className="flex-1 px-3 text-[13px] md:text-[14px] font-medium text-gray-800 text-left">
+                          This transaction was initiated, but could not be completed
+                        </div>
+                        <button
+                          className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
+                          onClick={() => setShowCancel(true)}
+                        >
+                          Cancel
                         </button>
                       </div>
                     );
