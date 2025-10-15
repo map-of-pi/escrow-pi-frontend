@@ -7,6 +7,7 @@ import { AppContext } from '@/context/AppContextProvider';
 import { fetchSingleUserOrder, updateOrderStatus } from '@/services/orderApi';
 import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend } from '@/lib';
 import { addComment } from '@/services/commentApi';
+import { payWithPi } from '@/config/payment';
 import { toast } from 'react-toastify';
 import { IComment, IOrder, OrderTypeEnum, PaymentDataType } from '@/types';
 import { payWithPi } from '@/config/payment';
@@ -190,7 +191,7 @@ export default function TxDetailsPage() {
     }
     if (tx?.status) {
       setShowCancel(false);
-      setActionBanner('Action completed successfully');
+      toast.success(`Status updated to ${statusLabel[newStatus]}`);
     }
   }
 
@@ -327,7 +328,10 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={()=> handleAction('cancelled')}
+                onClick={() => {
+                  setShowCancel(false);
+                  handleAction('cancelled');
+                }}
               >
                 Confirm
               </button>
@@ -390,14 +394,8 @@ export default function TxDetailsPage() {
                     className="w-full py-2 rounded-lg text-sm font-semibold"
                     style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                     onClick={() => {
-                      const percent = (lastProposedPercent ?? refundPercent);
-                      const accepted: Comment = { author: myUsername, text: `User ${myUsername} accepted proposed dispute resolution refund of ${fmt(percent)}%.`, ts: new Date().toISOString() };
-                      const completed: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
-                      setComments((prev) => [...prev, accepted, completed]);
-                      setTx({ ...tx, status: 'released' });
                       setShowAcceptProposal(false);
-                      setActionBanner('Action completed successfully');
-                      setTimeout(() => setActionBanner(''), 2000);
+                      handleAction('released');
                     }}
                   >
                     Confirm
@@ -432,7 +430,8 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  handleAction('released')
+                  setShowReceived(false);
+                  handleAction('released');
                 }}
               >
                 Confirm
@@ -455,7 +454,10 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => handleAction('fulfilled')}
+                onClick={() => {
+                  setShowFulfilled(false);
+                  handleAction('fulfilled');
+                }}
               >
                 Confirm
               </button>
@@ -477,7 +479,10 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => handleAction('cancelled')}
+                onClick={() => {
+                  setShowCancel(false);
+                  handleAction('cancelled');
+                }}
               >
                 Confirm Cancel
               </button>
@@ -772,7 +777,7 @@ export default function TxDetailsPage() {
                       </div>
                     );
                   }
-                  // UC6: Payer at Paid (paid): message + Dispute (single-button layout)
+                  // UC6a: Payer at Paid (paid): message + Cancel (single-button layout)
                   if (tx.myRole === 'payer' && tx.status === 'paid') {
                     return (
                       <div className="flex items-center gap-2 h-full">
@@ -781,9 +786,9 @@ export default function TxDetailsPage() {
                         </div>
                         <button
                           className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
-                          onClick={() => setShowDispute(true)}
+                          onClick={() => setShowCancel(true)}
                         >
-                          Dispute
+                          Cancel
                         </button>
                       </div>
                     );
@@ -825,7 +830,7 @@ export default function TxDetailsPage() {
                             className={`px-4 h-12 rounded-full text-sm font-semibold ${tx.status === 'fulfilled' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                             onClick={() => {
                               if (tx.status !== 'fulfilled') return;
-                              handleAction('released')
+                              handleAction('released');
                             }}
                           >
                             Mark Complete
@@ -856,26 +861,22 @@ export default function TxDetailsPage() {
           title={
             <div className="text-center space-y-1">
               <div className="font-semibold">Confirm you reject the request to pay pi</div>
-              <div className="text-2xl font-bold">{fmt(deriveBreakdown(tx.amount).total)} pi</div>
             </div>
           }
         >
-          {(() => { const b = deriveBreakdown(tx.amount); return (
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span>They get:</span><span>{fmt(b.base)} pi</span></div>
-            <div className="flex justify-between"><span>Transaction completion stake:</span><span>{fmt(b.completionStake)} pi</span></div>
-            <div className="text-[11px] text-gray-600">(refunded to you at end)</div>
-            <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
-            <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
             <div className="pt-2">
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold bg-red-100 text-red-700 border border-red-200"
-                onClick={() => handleAction('declined')}
+                onClick={() => {
+                  setShowReject(false);
+                  handleAction('declined');
+                }}
               >
                 Confirm Reject
               </button>
             </div>
-          </div> ); })()}
+          </div>
         </Modal>
       )}
 
@@ -902,7 +903,33 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() =>handleSend()}
+                onClick={async () => {
+                  try {
+                    setShowAccept(false);
+                    if (!currentUser?.pi_username) {
+                      toast.error('Please sign in');
+                      return;
+                    }
+                    const paymentData = {
+                      amount: tx.amount,
+                      memo: `Escrow payment between ${currentUser.pi_username} and ${tx.counterparty}`,
+                      metadata: { orderType: 'send', order_no: id },
+                    };
+                    await payWithPi(
+                      paymentData,
+                      () => {
+                        setActionBanner('Payment completed successfully');
+                        setTimeout(() => setActionBanner(''), 2000);
+                        router.push('/history');
+                      },
+                      () => {
+                        toast.error('Payment error');
+                      }
+                    );
+                  } catch (e) {
+                    toast.error('Payment error');
+                  }
+                }}
               >
                 Confirm Accept
               </button>
