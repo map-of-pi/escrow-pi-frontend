@@ -89,8 +89,9 @@ export default function NotificationsPage() {
         if (phase === 'read') {
           setHasMoreRead(false);
         } else {
-          // Do not prematurely switch; rely on totalUnread threshold
-          // If we got an empty page but totalUnread not reached, we'll try again on next intersection.
+          // If unread page returns empty (e.g., small dataset or race with totalUnread), switch to read phase
+          setHasMoreUnread(false);
+          setPhase('read');
         }
       }
     } catch (e) {
@@ -150,6 +151,14 @@ export default function NotificationsPage() {
       if (observerRef.current) observerRef.current.disconnect();
     };
   }, [isLoading, items.length, phase, hasMoreUnread, hasMoreRead]);
+
+  // If we switch to 'read' phase (e.g., after finishing unread), proactively fetch read notifications
+  useEffect(() => {
+    if (phase === 'read' && !isLoading && currentUser?.pi_uid) {
+      fetchMore();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   // Auto-fill: if list doesn't overflow its container and there is more to load, fetch more
   useEffect(() => {

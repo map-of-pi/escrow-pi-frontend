@@ -7,6 +7,7 @@ import { AppContext } from '@/context/AppContextProvider';
 import { fetchSingleUserOrder, updateOrderStatus } from '@/services/orderApi';
 import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend } from '@/lib';
 import { addComment } from '@/services/commentApi';
+import { payWithPi } from '@/config/payment';
 import { toast } from 'react-toastify';
 
 export default function TxDetailsPage() {
@@ -156,6 +157,9 @@ export default function TxDetailsPage() {
       setComments((prev) => [...prev, mapCommentToFrontend( result.comment, currentUser.pi_username),]);
       setShowDispute(false)
 
+      // Success feedback
+      toast.success(`Status updated to ${statusLabel[newStatus]}`);
+
       if (newComment) {
         handleAddComment();
       }
@@ -275,14 +279,8 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const ts = new Date().toISOString();
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['cancelled']}.`, ts };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts }] : [...prev, header]);
-                  setTx({ ...tx, status: 'cancelled' });
                   setShowCancel(false);
-                  toast.info('Action completed successfully');
-                  if (typed) setNewComment('');
+                  handleAction('cancelled');
                 }}
               >
                 Confirm
@@ -346,14 +344,8 @@ export default function TxDetailsPage() {
                     className="w-full py-2 rounded-lg text-sm font-semibold"
                     style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                     onClick={() => {
-                      const percent = (lastProposedPercent ?? refundPercent);
-                      const accepted: Comment = { author: myUsername, text: `User ${myUsername} accepted proposed dispute resolution refund of ${fmt(percent)}%.`, ts: new Date().toISOString() };
-                      const completed: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
-                      setComments((prev) => [...prev, accepted, completed]);
-                      setTx({ ...tx, status: 'released' });
                       setShowAcceptProposal(false);
-                      setActionBanner('Action completed successfully');
-                      setTimeout(() => setActionBanner(''), 2000);
+                      handleAction('released');
                     }}
                   >
                     Confirm
@@ -388,12 +380,8 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
-                  setComments((prev) => [...prev, header]);
-                  setTx({ ...tx, status: 'released' });
                   setShowReceived(false);
-                  setActionBanner('Action completed successfully');
-                  setTimeout(() => setActionBanner(''), 2000);
+                  handleAction('released');
                 }}
               >
                 Confirm
@@ -417,14 +405,8 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['fulfilled']}.`, ts: new Date().toISOString() };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'fulfilled' });
                   setShowFulfilled(false);
-                  setActionBanner('Action completed successfully');
-                  if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
+                  handleAction('fulfilled');
                 }}
               >
                 Confirm
@@ -448,14 +430,8 @@ export default function TxDetailsPage() {
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['cancelled']}.`, ts: new Date().toISOString() };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'cancelled' });
                   setShowCancel(false);
-                  setActionBanner('Action completed successfully');
-                  if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
+                  handleAction('cancelled');
                 }}
               >
                 Confirm Cancel
@@ -751,7 +727,7 @@ export default function TxDetailsPage() {
                       </div>
                     );
                   }
-                  // UC6: Payer at Paid (paid): message + Dispute (single-button layout)
+                  // UC6a: Payer at Paid (paid): message + Cancel (single-button layout)
                   if (tx.myRole === 'payer' && tx.status === 'paid') {
                     return (
                       <div className="flex items-center gap-2 h-full">
@@ -760,9 +736,9 @@ export default function TxDetailsPage() {
                         </div>
                         <button
                           className="px-4 h-12 rounded-full text-sm font-semibold bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]"
-                          onClick={() => setShowDispute(true)}
+                          onClick={() => setShowCancel(true)}
                         >
-                          Dispute
+                          Cancel
                         </button>
                       </div>
                     );
@@ -804,11 +780,7 @@ export default function TxDetailsPage() {
                             className={`px-4 h-12 rounded-full text-sm font-semibold ${tx.status === 'fulfilled' ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                             onClick={() => {
                               if (tx.status !== 'fulfilled') return;
-                              const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['released']}.`, ts: new Date().toISOString() };
-                              setComments((prev) => [...prev, header]);
-                              setTx({ ...tx, status: 'released' });
-                              setActionBanner('Action completed successfully');
-                              setTimeout(() => setActionBanner(''), 2000);
+                              handleAction('released');
                             }}
                           >
                             Mark Complete
@@ -839,35 +811,22 @@ export default function TxDetailsPage() {
           title={
             <div className="text-center space-y-1">
               <div className="font-semibold">Confirm you reject the request to pay pi</div>
-              <div className="text-2xl font-bold">{fmt(deriveBreakdown(tx.amount).total)} pi</div>
             </div>
           }
         >
-          {(() => { const b = deriveBreakdown(tx.amount); return (
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span>They get:</span><span>{fmt(b.base)} pi</span></div>
-            <div className="flex justify-between"><span>Transaction completion stake:</span><span>{fmt(b.completionStake)} pi</span></div>
-            <div className="text-[11px] text-gray-600">(refunded to you at end)</div>
-            <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
-            <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
             <div className="pt-2">
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold bg-red-100 text-red-700 border border-red-200"
                 onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['declined']}.`, ts: new Date().toISOString() };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: myUsername, text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'declined', needsPayerResponse: false });
                   setShowReject(false);
-                  setActionBanner('Action completed successfully');
-                  if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
+                  handleAction('declined');
                 }}
               >
                 Confirm Reject
               </button>
             </div>
-          </div> ); })()}
+          </div>
         </Modal>
       )}
 
@@ -894,15 +853,32 @@ export default function TxDetailsPage() {
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
                 style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  const header: Comment = { author: myUsername, text: `User ${myUsername} has marked the transaction as ${statusLabel['paid']}.`, ts: new Date().toISOString() };
-                  const typed = newComment.trim();
-                  setComments((prev) => typed ? [...prev, header, { author: 'You', text: typed, ts: new Date().toISOString() }] : [...prev, header]);
-                  setTx({ ...tx, status: 'paid', needsPayerResponse: false });
-                  setShowAccept(false);
-                  setActionBanner('Action completed successfully');
-                  if (typed) setNewComment('');
-                  setTimeout(() => setActionBanner(''), 2000);
+                onClick={async () => {
+                  try {
+                    setShowAccept(false);
+                    if (!currentUser?.pi_username) {
+                      toast.error('Please sign in');
+                      return;
+                    }
+                    const paymentData = {
+                      amount: tx.amount,
+                      memo: `Escrow payment between ${currentUser.pi_username} and ${tx.counterparty}`,
+                      metadata: { orderType: 'send', order_no: id },
+                    };
+                    await payWithPi(
+                      paymentData,
+                      () => {
+                        setActionBanner('Payment completed successfully');
+                        setTimeout(() => setActionBanner(''), 2000);
+                        router.push('/history');
+                      },
+                      () => {
+                        toast.error('Payment error');
+                      }
+                    );
+                  } catch (e) {
+                    toast.error('Payment error');
+                  }
                 }}
               >
                 Confirm Accept
