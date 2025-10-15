@@ -201,16 +201,25 @@ export default function TxDetailsPage() {
         toast.warn('can not find order');
         return
       }
-      updateUI(result);     
+      const txItem = mapOrdersToTxItems([result.order], currentUser.pi_username);
+      setTx(txItem[0]);
+      setComments((prev) => [...prev, mapCommentToFrontend( result.comment, currentUser.pi_username),]);
+      setShowDispute(false)
+
+      // Success feedback
       toast.success(`Status updated to ${statusLabel[newStatus]}`);
-      
+
+      if (newComment) {
+        handleAddComment();
+      }
+
     } catch (error:any) {
       toast.error('error updating order')
     } finally {
       setLoading(false);
     }
   }
-
+  
   const onPaymentComplete = async (data:any) => {
     updateUI(data)
     setActionBanner('Action completed successfully');
