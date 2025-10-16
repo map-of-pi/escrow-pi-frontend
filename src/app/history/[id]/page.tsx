@@ -346,15 +346,22 @@ export default function TxDetailsPage() {
         <Modal
           open={showCancel}
           onClose={() => setShowCancel(false)}
-          title={<div className="font-semibold text-center">Confirm cancel transaction and refund payment {fmt(deriveBreakdown(tx.amount).total)} pi</div>}
+          title={(() => { const b = deriveBreakdown(tx.amount); const networkRefund = 0.01; const refundTotal = b.base + b.completionStake + networkRefund; return (
+            <div className="text-center space-y-1">
+              <div className="font-semibold">Confirm cancel transaction and get refund</div>
+              <div className="text-2xl font-bold">{fmt(refundTotal)} pi</div>
+            </div>
+          ); })()}
         >
           <div className="space-y-3 text-sm">
-            {(() => { const b = deriveBreakdown(tx.amount); return (
+            {(() => { const b = deriveBreakdown(tx.amount); const networkRefund = 0.01; const networkNotRefunded = 0.02; const refundTotal = b.base + b.completionStake + networkRefund; return (
               <div className="space-y-2 rounded-lg p-3">
-                <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(b.base)} pi</span></div>
-                <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
-                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
-                <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+                <div className="flex justify-between"><span>Payer amount (refunded):</span><span>{fmt(b.base)} pi</span></div>
+                <div className="flex justify-between"><span>Transaction Stake (refunded):</span><span>{fmt(b.completionStake)} pi</span></div>
+                <div className="flex justify-between"><span>Pi Network gas fees (refunded):</span><span>{fmt(networkRefund)} pi</span></div>
+                <div className="flex justify-between"><span>Pi Network gas fees (not refunded):</span><span>{fmt(networkNotRefunded)} pi</span></div>
+                <div className="flex justify-between"><span>EscrowPi fee (not refunded):</span><span>{fmt(b.escrowFee)} pi</span></div>
+                <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refundTotal)} pi</span></div>
               </div>
             ); })()}
             <div className="pt-2">
