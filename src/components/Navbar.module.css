@@ -28,3 +28,38 @@
   /* Gold border ring around the badge */
   box-shadow: 0 0 0 2px #D4AF37;
 }
+
+.titleLoaded {
+  display: inline-block;
+  overflow: hidden;
+  width: 50%;
+  white-space: nowrap;
+  position: relative;
+  text-align: center;
+  font-size: 1.3rem;
+  font-family: inherit;
+}
+
+.marqueeWrapper {
+  display: flex;
+  width: max-content;
+  animation: marqueeShort 6s linear infinite;
+}
+
+.marqueeContent {
+  display: inline-block;
+  padding-right: 2rem;
+}
+
+@keyframes marqueeShort {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marqueeWrapper:hover {
+  animation-play-state: paused;
+}

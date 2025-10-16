@@ -106,7 +106,17 @@ export default function Navbar() {
           <div className="flex-1"></div>
           <div className="text-center text-[1.3rem] whitespace-nowrap flex-1" style={{ color: 'var(--default-secondary-color)' }}>
             <span className="title-loading">Loading ...</span>
-            <span className="title-loaded">EscrowPi Wallet</span>
+            {/* Marquee replaces static title */}
+            <div className={`title-loaded ${styles.titleLoaded}`}>
+              <div className={styles.marqueeWrapper}>
+                <div className={styles.marqueeContent}>
+                  EscrowPi Wallet • Test version → release to payee not included in this version
+                </div>
+                <div className={styles.marqueeContent} aria-hidden="true">
+                  EscrowPi Wallet • Test version → release to payee not included in this version
+                </div>
+              </div>
+            </div>
           </div>
           <div className="flex-1" />
         </div>
