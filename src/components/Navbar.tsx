@@ -110,10 +110,10 @@ export default function Navbar() {
             <div className={`title-loaded ${styles.titleLoaded}`}>
               <div className={styles.marqueeWrapper}>
                 <div className={styles.marqueeContent}>
-                  EscrowPi Wallet • Test version → release to payee not included in this version
+                  EscrowPi Wallet : Test version, release to payee (a2u) not included.
                 </div>
                 <div className={styles.marqueeContent} aria-hidden="true">
-                  EscrowPi Wallet • Test version → release to payee not included in this version
+                  EscrowPi Wallet : Test version, release to payee (a2u) not included.
                 </div>
               </div>
             </div>
