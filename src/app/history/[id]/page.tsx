@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
 import transactions from '@/data/transactions.json';
 import { AppContext } from '@/context/AppContextProvider';
-import { fetchSingleUserOrder, updateOrderStatus } from '@/services/orderApi';
+import { fetchSingleUserOrder, updateOrderStatus, proposeDispute, acceptDispute } from '@/services/orderApi';
 import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend } from '@/lib';
 import { addComment } from '@/services/commentApi';
 import { payWithPi } from '@/config/payment';
@@ -399,14 +399,29 @@ export default function TxDetailsPage() {
                   <button
                     className="w-full py-2 rounded-lg text-sm font-semibold"
                     style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                    onClick={() => {
-                      const header: Comment = { author: myUsername, text: `User ${myUsername} has proposed a dispute resolution refund of ${fmt(refundPercent)}%.`, ts: new Date().toISOString() };
-                      setComments((prev) => [...prev, header]);
-                      setLastProposedPercent(refundPercent);
-                      setLastProposedBy(tx.myRole);
-                      setShowSendProposal(false);
-                      setActionBanner('Action completed successfully');
-                      setTimeout(() => setActionBanner(''), 2000);
+                    onClick={async () => {
+                      try {
+                        const percentVal = parseFloat(refundPercentStr);
+                        const res = await proposeDispute(id, { percent: Number.isFinite(percentVal) ? percentVal : refundPercent });
+                        if (!res) {
+                          toast.error('Failed to propose dispute');
+                          return;
+                        }
+                        const refreshed = await fetchSingleUserOrder(id);
+                        if (refreshed) {
+                          const txItem = mapOrdersToTxItems([refreshed.order], currentUser?.pi_username as string);
+                          setTx(txItem[0] ?? null);
+                          setComments(mapCommentsToFrontend(refreshed.comments, currentUser?.pi_username as string));
+                        }
+                        setLastProposedPercent(percentVal);
+                        setLastProposedBy(tx.myRole);
+                        setShowSendProposal(false);
+                        setActionBanner('Action completed successfully');
+                        setTimeout(() => setActionBanner(''), 2000);
+                        toast.success('Dispute proposal sent');
+                      } catch (e) {
+                        toast.error('Error sending dispute proposal');
+                      }
                     }}
                   >
                     Confirm
@@ -433,9 +448,26 @@ export default function TxDetailsPage() {
                   <button
                     className="w-full py-2 rounded-lg text-sm font-semibold"
                     style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                    onClick={() => {
-                      setShowAcceptProposal(false);
-                      handleAction('released');
+                    onClick={async () => {
+                      try {
+                        const res = await acceptDispute(id, {});
+                        if (!res) {
+                          toast.error('Failed to accept dispute');
+                          return;
+                        }
+                        const refreshed = await fetchSingleUserOrder(id);
+                        if (refreshed) {
+                          const txItem = mapOrdersToTxItems([refreshed.order], currentUser?.pi_username as string);
+                          setTx(txItem[0] ?? null);
+                          setComments(mapCommentsToFrontend(refreshed.comments, currentUser?.pi_username as string));
+                        }
+                        setShowAcceptProposal(false);
+                        setActionBanner('Action completed successfully');
+                        setTimeout(() => setActionBanner(''), 2000);
+                        toast.success('Dispute proposal accepted');
+                      } catch (e) {
+                        toast.error('Error accepting dispute');
+                      }
                     }}
                   >
                     Confirm
