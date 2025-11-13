@@ -1,8 +1,7 @@
 "use client";
-import React, { useMemo, useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
-import transactions from '@/data/transactions.json';
 import { AppContext } from '@/context/AppContextProvider';
 import { fetchSingleUserOrder, updateOrderStatus, proposeDispute, acceptDispute } from '@/services/orderApi';
 import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend } from '@/lib';
@@ -16,16 +15,8 @@ export default function TxDetailsPage() {
   const params = useParams();
   const id = String(params?.id || '');
 
-  // Load from shared mock JSON
-  const initial = useMemo<TxItem | undefined>(() => {
-    return (transactions as unknown as TxItem[]).find((t) => t.id === id);
-  }, [id]);
-
-  const [tx, setTx] = useState<TxItem | undefined>(initial);
-  const [showPopup, setShowPopup] = useState<boolean>(!!(tx?.needsPayerResponse && tx.direction === 'receive' && tx.status === 'requested'));
+  const [tx, setTx] = useState<TxItem | undefined>(undefined);
   const { currentUser } = useContext(AppContext);
-  const [order, setOrder] = useState<TxItem | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showAccept, setShowAccept] = useState<boolean>(false);
   const [showReject, setShowReject] = useState<boolean>(false);
   const [showCancel, setShowCancel] = useState<boolean>(false);
@@ -39,18 +30,6 @@ export default function TxDetailsPage() {
   const [showComments, setShowComments] = useState<boolean>(false);
   type Comment = { author: string; text: string; ts: string };
 
-  // Prefer user-provided handle stored in localStorage. Fallback to '@you'.
-  const myUsername = useMemo(() => {
-    if (typeof window === 'undefined') return '@you';
-    const v = currentUser?.pi_username;
-    return v ? v.trim() : '@you';
-  }, []);
-
-  // const initialComments: Comment[] = useMemo(() => {
-  //   if (!tx) return [];
-  //   const author = tx.myRole === 'payer' ? tx.counterparty : myUsername;
-  //   return comments && comments.length ? [{ author, text: comments[0].text, ts: tx.date }] : [];
-  // }, [tx, myUsername]);
   
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState<string>("");
@@ -67,7 +46,6 @@ export default function TxDetailsPage() {
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const previewContentRef = useRef<HTMLDivElement | null>(null);
   const [offsetPx, setOffsetPx] = useState(0);
-  const [orderNo, setOrderNo] = useState<string>("");
 
   useEffect(() => {
     const measure = () => {
@@ -167,8 +145,6 @@ export default function TxDetailsPage() {
         }
       } catch (error) {
         console.error("Error loading orders:", error);
-      } finally {
-        setLoading(false);
       }
     };
     loadOrder();
@@ -200,8 +176,6 @@ export default function TxDetailsPage() {
 
     } catch (error:any) {
       toast.error('error adding new comment')
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -241,8 +215,6 @@ export default function TxDetailsPage() {
 
     } catch (error:any) {
       toast.error('error updating order')
-    } finally {
-      setLoading(false);
     }
   }
   
