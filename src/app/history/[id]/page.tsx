@@ -60,6 +60,8 @@ export default function TxDetailsPage() {
   const [refundPercentStr, setRefundPercentStr] = useState<string>('20');
   const [lastProposedPercent, setLastProposedPercent] = useState<number | null>(null);
   const [lastProposedBy, setLastProposedBy] = useState<'payer' | 'payee' | null>(null);
+  const [lastProposedByUsername, setLastProposedByUsername] = useState<string | null>(null);
+  const [disputeStatus, setDisputeStatus] = useState<'none' | 'proposed' | 'accepted' | 'declined' | 'cancelled'>('none');
 
   // Commentary preview measurement using translateY to keep latest visible without cutting
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -139,6 +141,30 @@ export default function TxDetailsPage() {
         const txItem = mapOrdersToTxItems([fetchedOrder.order], currentUser.pi_username);
         setTx(txItem[0] ?? undefined);
         setComments(mapCommentsToFrontend(fetchedOrder.comments, currentUser.pi_username))
+        const d = fetchedOrder.order.dispute;
+        if (d && d.status === 'proposed') {
+          if (typeof d.proposal_percent === 'number') {
+            const pct = d.proposal_percent;
+            setRefundPercent(pct);
+            setRefundPercentStr(String(pct));
+            setLastProposedPercent(pct);
+          }
+          const proposer = d.proposed_by;
+          if (proposer) {
+            const role = proposer === fetchedOrder.order.sender_username ? 'payer' : 'payee';
+            setLastProposedBy(role);
+            setLastProposedByUsername(proposer);
+          }
+          setDisputeStatus('proposed');
+        } else {
+          setLastProposedPercent(null);
+          setLastProposedBy(null);
+          setLastProposedByUsername(null);
+          setDisputeStatus((d?.status as any) || 'none');
+          // Reset to default 20% when no active proposal
+          setRefundPercent(20);
+          setRefundPercentStr('20');
+        }
       } catch (error) {
         console.error("Error loading orders:", error);
       } finally {
@@ -402,7 +428,8 @@ export default function TxDetailsPage() {
                     onClick={async () => {
                       try {
                         const percentVal = parseFloat(refundPercentStr);
-                        const res = await proposeDispute(id, { percent: Number.isFinite(percentVal) ? percentVal : refundPercent });
+                        const chosen = Number.isFinite(percentVal) ? percentVal : refundPercent;
+                        const res = await proposeDispute(id, { percent: chosen });
                         if (!res) {
                           toast.error('Failed to propose dispute');
                           return;
@@ -412,9 +439,23 @@ export default function TxDetailsPage() {
                           const txItem = mapOrdersToTxItems([refreshed.order], currentUser?.pi_username as string);
                           setTx(txItem[0] ?? null);
                           setComments(mapCommentsToFrontend(refreshed.comments, currentUser?.pi_username as string));
+                          const d = refreshed.order.dispute;
+                          if (d && d.status === 'proposed') {
+                            if (typeof d.proposal_percent === 'number') {
+                              const pct = d.proposal_percent;
+                              setRefundPercent(pct);
+                              setRefundPercentStr(String(pct));
+                              setLastProposedPercent(pct);
+                            }
+                            const proposer = d.proposed_by;
+                            if (proposer) {
+                              const role = proposer === refreshed.order.sender_username ? 'payer' : 'payee';
+                              setLastProposedBy(role);
+                              setLastProposedByUsername(proposer);
+                            }
+                            setDisputeStatus('proposed');
+                          }
                         }
-                        setLastProposedPercent(percentVal);
-                        setLastProposedBy(tx.myRole);
                         setShowSendProposal(false);
                         setActionBanner('Action completed successfully');
                         setTimeout(() => setActionBanner(''), 2000);
@@ -460,6 +501,25 @@ export default function TxDetailsPage() {
                           const txItem = mapOrdersToTxItems([refreshed.order], currentUser?.pi_username as string);
                           setTx(txItem[0] ?? null);
                           setComments(mapCommentsToFrontend(refreshed.comments, currentUser?.pi_username as string));
+                          const d = refreshed.order.dispute;
+                          if (d) {
+                            if (d.status === 'accepted') {
+                              if (typeof d.proposal_percent === 'number') {
+                                const pct = d.proposal_percent;
+                                setRefundPercent(pct);
+                                setRefundPercentStr(String(pct));
+                                setLastProposedPercent(pct);
+                              }
+                              setDisputeStatus('accepted');
+                            } else if (d.status === 'proposed') {
+                              setDisputeStatus('proposed');
+                            } else {
+                              setLastProposedPercent(null);
+                              setLastProposedBy(null);
+                              setLastProposedByUsername(null);
+                              setDisputeStatus((d.status as any) || 'none');
+                            }
+                          }
                         }
                         setShowAcceptProposal(false);
                         setActionBanner('Action completed successfully');
@@ -690,7 +750,15 @@ export default function TxDetailsPage() {
                   }
                   // UC9: Both roles at Disputed
                   if (tx.status === 'disputed') {
-                    const matchesProposal = lastProposedPercent !== null && lastProposedBy !== tx.myRole && Math.abs(refundPercent - lastProposedPercent) < 1e-9;
+                    // Enable/disable rules per spec:
+                    // - Initially: no active proposal -> Send enabled, Accept disabled
+                    // - When one party proposes: proposer has both disabled; counterparty has both enabled
+                    const hasProposal = disputeStatus === 'proposed' && lastProposedPercent !== null;
+                    const isProposer = hasProposal && lastProposedBy === tx.myRole;
+                    const inputValid = refundPercent >= 0 && refundPercent <= 100;
+                    const equalsCurrent = hasProposal && lastProposedPercent !== null && Math.abs(refundPercent - lastProposedPercent) < 1e-9;
+                    const sendDisabled = !inputValid || (hasProposal && (isProposer || equalsCurrent));
+                    const acceptDisabled = !hasProposal || isProposer;
                     return (
                       <div className="h-full flex flex-col">
                         {/* Top strip: Dispute Centre */}
@@ -702,8 +770,8 @@ export default function TxDetailsPage() {
                         <div className="flex-1 grid grid-cols-3 items-center gap-2">
                           <div className="flex justify-start">
                             <button
-                              disabled={matchesProposal}
-                              className={`px-3 h-12 rounded-full text-xs font-semibold ${!matchesProposal ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                              disabled={sendDisabled}
+                              className={`px-3 h-12 rounded-full text-xs font-semibold ${!sendDisabled ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                               onClick={() => setShowSendProposal(true)}
                             >
                               <span className="flex flex-col leading-tight items-center">
@@ -765,11 +833,17 @@ export default function TxDetailsPage() {
                               />
                               <span className="ml-1 text-[16px] font-bold">%</span>
                             </div>
+                            {hasProposal && lastProposedPercent !== null && (
+                              <div className="mt-1 text-[11px] text-gray-700">
+                                Current proposal: <span className="font-semibold">{lastProposedPercent}%</span>
+                                {lastProposedByUsername ? <> by <span className="font-semibold">{lastProposedByUsername}</span></> : null}
+                              </div>
+                            )}
                           </div>
                           <div className="flex justify-end">
                             <button
-                              disabled={!matchesProposal}
-                              className={`px-3 h-12 rounded-full text-xs font-semibold ${matchesProposal ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                              disabled={acceptDisabled}
+                              className={`px-3 h-12 rounded-full text-xs font-semibold ${!acceptDisabled ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                               onClick={() => setShowAcceptProposal(true)}
                             >
                               <span className="flex flex-col leading-tight items-center">
