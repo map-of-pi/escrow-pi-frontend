@@ -688,7 +688,7 @@ export default function TxDetailsPage() {
             <div className="w-full max-w-md mx-auto">
               <div className="font-semibold mb-2 text-center">Action</div>
               {/* Single Action shell; height depends on status (larger for disputed only) */}
-              <div className={`w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] ${tx.status === 'disputed' ? 'h-[100px]' : 'h-[72px]'} overflow-hidden`}>
+              <div className={`w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] ${tx.status === 'disputed' ? 'min-h-[120px]' : 'h-[72px]'}`}>
                 {(() => {
                   const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'released';
                   if (isTerminal) {
@@ -731,12 +731,26 @@ export default function TxDetailsPage() {
                     const equalsCurrent = hasProposal && lastProposedPercent !== null && Math.abs(refundPercent - lastProposedPercent) < 1e-9;
                     const sendDisabled = !inputValid || (hasProposal && (isProposer || equalsCurrent));
                     const acceptDisabled = !hasProposal || isProposer;
+                    const inputDisabled = hasProposal && isProposer;
                     return (
                       <div className="h-full flex flex-col">
                         {/* Top strip: Dispute Centre */}
                         <div className="text-center text-[12px] font-semibold rounded-md px-2 py-1 mb-1"
                              style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}>
                           Dispute Centre
+                        </div>
+                        {/* Show current proposal summary (always) */}
+                        <div className="text-center text-[11px] text-gray-700 mb-1">
+                          {hasProposal && lastProposedPercent !== null ? (
+                            <>
+                              Current proposal: <span className="font-semibold">{lastProposedPercent}%</span>
+                              {lastProposedByUsername ? (
+                                <> by <span className="font-semibold">{lastProposedByUsername}</span></>
+                              ) : null}
+                            </>
+                          ) : (
+                            <>Current proposal: <span className="font-semibold">None</span></>
+                          )}
                         </div>
                         {/* Content row */}
                         <div className="flex-1 grid grid-cols-3 items-center gap-2">
@@ -753,13 +767,14 @@ export default function TxDetailsPage() {
                             </button>
                           </div>
                           <div className="flex flex-col items-center justify-center leading-tight">
-                            <div className="text-[11px] text-gray-800">Proposed refund</div>
-                            <div className="text-[10px] text-gray-600">(0-100%)</div>
+                            <div className={`text-[11px] ${inputDisabled ? 'text-gray-400' : 'text-gray-800'}`}>Propose refund</div>
+                            <div className={`text-[10px] ${inputDisabled ? 'text-gray-400' : 'text-gray-600'}`}>(0-100%)</div>
                             <div className="flex items-baseline justify-center mt-0.5">
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                className="w-16 text-center bg-transparent border-0 outline-none text-[20px] font-bold"
+                                disabled={inputDisabled}
+                                className={`w-16 text-center bg-transparent border-0 outline-none text-[20px] font-bold ${inputDisabled ? 'text-gray-400 cursor-not-allowed' : ''}`}
                                 value={refundPercentStr}
                                 onChange={(e) => {
                                   let s = e.target.value || '';
@@ -803,14 +818,8 @@ export default function TxDetailsPage() {
                                   setRefundPercentStr(norm);
                                 }}
                               />
-                              <span className="ml-1 text-[16px] font-bold">%</span>
+                              <span className={`ml-1 text-[16px] font-bold ${inputDisabled ? 'text-gray-400' : ''}`}>%</span>
                             </div>
-                            {hasProposal && lastProposedPercent !== null && (
-                              <div className="mt-1 text-[11px] text-gray-700">
-                                Current proposal: <span className="font-semibold">{lastProposedPercent}%</span>
-                                {lastProposedByUsername ? <> by <span className="font-semibold">{lastProposedByUsername}</span></> : null}
-                              </div>
-                            )}
                           </div>
                           <div className="flex justify-end">
                             <button
