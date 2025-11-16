@@ -40,6 +40,7 @@ export default function TxDetailsPage() {
   const [lastProposedPercent, setLastProposedPercent] = useState<number | null>(null);
   const [lastProposedBy, setLastProposedBy] = useState<'payer' | 'payee' | null>(null);
   const [lastProposedByUsername, setLastProposedByUsername] = useState<string | null>(null);
+  const [acceptedByUsername, setAcceptedByUsername] = useState<string | null>(null);
   const [disputeStatus, setDisputeStatus] = useState<'none' | 'proposed' | 'accepted' | 'declined' | 'cancelled'>('none');
 
   // Commentary preview measurement using translateY to keep latest visible without cutting
@@ -134,14 +135,26 @@ export default function TxDetailsPage() {
             setLastProposedByUsername(proposer);
           }
           setDisputeStatus('proposed');
-        } else {
+          setAcceptedByUsername(null);
+        } else if (d && d.status === 'accepted') {
+          if (typeof d.proposal_percent === 'number') {
+            const pct = d.proposal_percent;
+            setRefundPercent(pct);
+            setRefundPercentStr(String(pct));
+            setLastProposedPercent(pct);
+          }
+          setLastProposedByUsername(d.proposed_by || null);
+          setAcceptedByUsername(d.accepted_by || null);
+          setDisputeStatus('accepted');
+        } else if (d && (d.status === 'none' || d.status === 'declined' || d.status === 'cancelled')) {
+          // Explicitly no active dispute -> clear proposal metadata and keep input at default (initial state already 20)
           setLastProposedPercent(null);
           setLastProposedBy(null);
           setLastProposedByUsername(null);
-          setDisputeStatus((d?.status as any) || 'none');
-          // Reset to default 20% when no active proposal
-          setRefundPercent(20);
-          setRefundPercentStr('20');
+          setAcceptedByUsername(null);
+          setDisputeStatus(d.status as any);
+        } else {
+          // If backend omitted dispute or returned an unrecognized state; just preserve current UI state by avoiding jarring resets.
         }
       } catch (error) {
         console.error("Error loading orders:", error);
@@ -426,6 +439,7 @@ export default function TxDetailsPage() {
                               setLastProposedByUsername(proposer);
                             }
                             setDisputeStatus('proposed');
+                            setAcceptedByUsername(null);
                           }
                         }
                         setShowSendProposal(false);
@@ -482,6 +496,8 @@ export default function TxDetailsPage() {
                                 setRefundPercentStr(String(pct));
                                 setLastProposedPercent(pct);
                               }
+                              setLastProposedByUsername(d.proposed_by || null);
+                              setAcceptedByUsername(d.accepted_by || null);
                               setDisputeStatus('accepted');
                             } else if (d.status === 'proposed') {
                               setDisputeStatus('proposed');
@@ -489,6 +505,7 @@ export default function TxDetailsPage() {
                               setLastProposedPercent(null);
                               setLastProposedBy(null);
                               setLastProposedByUsername(null);
+                              setAcceptedByUsername(null);
                               setDisputeStatus((d.status as any) || 'none');
                             }
                           }
@@ -725,13 +742,14 @@ export default function TxDetailsPage() {
                     // Enable/disable rules per spec:
                     // - Initially: no active proposal -> Send enabled, Accept disabled
                     // - When one party proposes: proposer has both disabled; counterparty has both enabled
+                    const isAccepted = disputeStatus === 'accepted';
                     const hasProposal = disputeStatus === 'proposed' && lastProposedPercent !== null;
                     const isProposer = hasProposal && lastProposedBy === tx.myRole;
                     const inputValid = refundPercent >= 0 && refundPercent <= 100;
                     const equalsCurrent = hasProposal && lastProposedPercent !== null && Math.abs(refundPercent - lastProposedPercent) < 1e-9;
-                    const sendDisabled = !inputValid || (hasProposal && (isProposer || equalsCurrent));
-                    const acceptDisabled = !hasProposal || isProposer;
-                    const inputDisabled = hasProposal && isProposer;
+                    const sendDisabled = isAccepted || !inputValid || (hasProposal && (isProposer || equalsCurrent));
+                    const acceptDisabled = isAccepted || !hasProposal || isProposer || !equalsCurrent;
+                    const inputDisabled = isAccepted || (hasProposal && isProposer);
                     return (
                       <div className="h-full flex flex-col">
                         {/* Top strip: Dispute Centre */}
@@ -739,9 +757,19 @@ export default function TxDetailsPage() {
                              style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}>
                           Dispute Centre
                         </div>
-                        {/* Show current proposal summary (always) */}
+                        {/* Show proposal status summary (always) */}
                         <div className="text-center text-[11px] text-gray-700 mb-1">
-                          {hasProposal && lastProposedPercent !== null ? (
+                          {isAccepted ? (
+                            <>
+                              Accepted proposal: <span className="font-semibold">{lastProposedPercent ?? 0}%</span>
+                              {lastProposedByUsername ? (
+                                <> — Proposed by: <span className="font-semibold">{lastProposedByUsername}</span></>
+                              ) : null}
+                              {acceptedByUsername ? (
+                                <> & Accepted by: <span className="font-semibold">{acceptedByUsername}</span></>
+                              ) : null}
+                            </>
+                          ) : hasProposal && lastProposedPercent !== null ? (
                             <>
                               Current proposal: <span className="font-semibold">{lastProposedPercent}%</span>
                               {lastProposedByUsername ? (
