@@ -72,7 +72,6 @@ export const mapOrdersToTxItems = (orders: IOrder[], authUsername: string): TxIt
       amount: order.amount,
       status: order.status as TxStatus,
       date: new Date(order.createdAt).toISOString(),
-      auditLog: `${order.order_no}`,
     };
   });
 };

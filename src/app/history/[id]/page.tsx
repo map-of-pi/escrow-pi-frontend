@@ -42,6 +42,8 @@ export default function TxDetailsPage() {
   const [lastProposedByUsername, setLastProposedByUsername] = useState<string | null>(null);
   const [acceptedByUsername, setAcceptedByUsername] = useState<string | null>(null);
   const [disputeStatus, setDisputeStatus] = useState<'none' | 'proposed' | 'accepted' | 'declined' | 'cancelled'>('none');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   // Commentary preview measurement using translateY to keep latest visible without cutting
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -156,12 +158,14 @@ export default function TxDetailsPage() {
         } else {
           // If backend omitted dispute or returned an unrecognized state; just preserve current UI state by avoiding jarring resets.
         }
+        setIsRefreshing(false);
       } catch (error) {
         console.error("Error loading orders:", error);
+        setIsRefreshing(false);
       }
     };
     loadOrder();
-  }, [currentUser, id]);
+  }, [currentUser, id, refreshTick]);
 
   
   const reset = () => {
@@ -289,6 +293,20 @@ export default function TxDetailsPage() {
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg font-bold text-center" style={{ color: 'var(--default-primary-color)' }}>
           EscrowPi Transaction
         </h1>
+        <button
+          aria-label="Refresh"
+          className={`absolute right-0 inline-flex items-center justify-center h-9 w-9 rounded-full border ${isRefreshing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+          onClick={() => { if (!isRefreshing) { setIsRefreshing(true); setRefreshTick((t)=>t+1); } }}
+          disabled={isRefreshing}
+          title="Refresh"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isRefreshing ? 'animate-spin' : ''}>
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"></path>
+            <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14"></path>
+          </svg>
+        </button>
       </div>
 
       <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -299,9 +317,14 @@ export default function TxDetailsPage() {
           </div>
           <div className={`text-xs px-2 py-1 rounded border ${statusClasses[tx.status]}`}>{statusLabel[tx.status]}</div>
         </div>
-        <div className="mt-2 text-center">
-          <div className="text-sm text-gray-600">Payment transfer amount</div>
-          <div className="text-3xl font-bold">{tx.amount.toFixed(2)} <span className="text-xl align-top">Pi</span></div>
+        <div className="mt-1 flex items-end justify-between">
+          <div>
+            <div className="text-2xl font-bold">
+              {tx.amount.toFixed(2)} <span className="text-lg align-top">Pi</span>
+            </div>
+            <div className="text-xs text-gray-500">{tx.id}</div>
+          </div>
+          <div className="text-xs text-gray-500">{new Date(tx.date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</div>
         </div>
         {/* Disputed banner removed from top card; message is shown in Action area for consistency */}
 
