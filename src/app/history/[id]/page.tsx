@@ -1,10 +1,9 @@
 "use client";
-import React, { useMemo, useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
-import transactions from '@/data/transactions.json';
 import { AppContext } from '@/context/AppContextProvider';
-import { fetchSingleUserOrder, updateOrderStatus } from '@/services/orderApi';
+import { fetchSingleUserOrder, updateOrderStatus, proposeDispute, acceptDispute } from '@/services/orderApi';
 import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend } from '@/lib';
 import { addComment } from '@/services/commentApi';
 import { payWithPi } from '@/config/payment';
@@ -16,16 +15,8 @@ export default function TxDetailsPage() {
   const params = useParams();
   const id = String(params?.id || '');
 
-  // Load from shared mock JSON
-  const initial = useMemo<TxItem | undefined>(() => {
-    return (transactions as unknown as TxItem[]).find((t) => t.id === id);
-  }, [id]);
-
-  const [tx, setTx] = useState<TxItem | undefined>(initial);
-  const [showPopup, setShowPopup] = useState<boolean>(!!(tx?.needsPayerResponse && tx.direction === 'receive' && tx.status === 'requested'));
+  const [tx, setTx] = useState<TxItem | undefined>(undefined);
   const { currentUser } = useContext(AppContext);
-  const [order, setOrder] = useState<TxItem | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showAccept, setShowAccept] = useState<boolean>(false);
   const [showReject, setShowReject] = useState<boolean>(false);
   const [showCancel, setShowCancel] = useState<boolean>(false);
@@ -39,18 +30,6 @@ export default function TxDetailsPage() {
   const [showComments, setShowComments] = useState<boolean>(false);
   type Comment = { author: string; text: string; ts: string };
 
-  // Prefer user-provided handle stored in localStorage. Fallback to '@you'.
-  const myUsername = useMemo(() => {
-    if (typeof window === 'undefined') return '@you';
-    const v = currentUser?.pi_username;
-    return v ? v.trim() : '@you';
-  }, []);
-
-  // const initialComments: Comment[] = useMemo(() => {
-  //   if (!tx) return [];
-  //   const author = tx.myRole === 'payer' ? tx.counterparty : myUsername;
-  //   return comments && comments.length ? [{ author, text: comments[0].text, ts: tx.date }] : [];
-  // }, [tx, myUsername]);
   
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState<string>("");
@@ -60,12 +39,16 @@ export default function TxDetailsPage() {
   const [refundPercentStr, setRefundPercentStr] = useState<string>('20');
   const [lastProposedPercent, setLastProposedPercent] = useState<number | null>(null);
   const [lastProposedBy, setLastProposedBy] = useState<'payer' | 'payee' | null>(null);
+  const [lastProposedByUsername, setLastProposedByUsername] = useState<string | null>(null);
+  const [acceptedByUsername, setAcceptedByUsername] = useState<string | null>(null);
+  const [disputeStatus, setDisputeStatus] = useState<'none' | 'proposed' | 'accepted' | 'declined' | 'cancelled'>('none');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   // Commentary preview measurement using translateY to keep latest visible without cutting
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const previewContentRef = useRef<HTMLDivElement | null>(null);
   const [offsetPx, setOffsetPx] = useState(0);
-  const [orderNo, setOrderNo] = useState<string>("");
 
   useEffect(() => {
     const measure = () => {
@@ -107,21 +90,21 @@ export default function TxDetailsPage() {
   // Given total (top figure), derive base and fees using the same policy as the homepage
   const deriveBreakdown = (total: number) => {
     // Known constants
-    const network = 0.03;
+    const network = 0.02;
     // Find base such that total ≈ base + stake + network + escrow
     // stake = max(0.1*base, 1)
-    // escrow = max(0.03*base, 0.1)
+    // escrow = max(0.01*base, 0.1)
     let lo = 0, hi = Math.max(total, 1);
     for (let i = 0; i < 50; i++) {
       const mid = (lo + hi) / 2;
       const stake = Math.max(0.1 * mid, 1);
-      const escrow = Math.max(0.03 * mid, 0.1);
+      const escrow = Math.max(0.01 * mid, 0.1);
       const t = mid + stake + network + escrow;
       if (t > total) hi = mid; else lo = mid;
     }
     const base = lo;
     const completionStake = Math.max(0.1 * base, 1);
-    const escrowFee = Math.max(0.03 * base, 0.1);
+    const escrowFee = Math.max(0.01 * base, 0.1);
     const recomputedTotal = base + completionStake + network + escrowFee;
     return { base, completionStake, networkFees: network, escrowFee, total: recomputedTotal };
   };
@@ -139,14 +122,50 @@ export default function TxDetailsPage() {
         const txItem = mapOrdersToTxItems([fetchedOrder.order], currentUser.pi_username);
         setTx(txItem[0] ?? undefined);
         setComments(mapCommentsToFrontend(fetchedOrder.comments, currentUser.pi_username))
+        const d = fetchedOrder.order.dispute;
+        if (d && d.status === 'proposed') {
+          if (typeof d.proposal_percent === 'number') {
+            const pct = d.proposal_percent;
+            setRefundPercent(pct);
+            setRefundPercentStr(String(pct));
+            setLastProposedPercent(pct);
+          }
+          const proposer = d.proposed_by;
+          if (proposer) {
+            const role = proposer === fetchedOrder.order.sender_username ? 'payer' : 'payee';
+            setLastProposedBy(role);
+            setLastProposedByUsername(proposer);
+          }
+          setDisputeStatus('proposed');
+          setAcceptedByUsername(null);
+        } else if (d && d.status === 'accepted') {
+          if (typeof d.proposal_percent === 'number') {
+            const pct = d.proposal_percent;
+            setRefundPercent(pct);
+            setRefundPercentStr(String(pct));
+            setLastProposedPercent(pct);
+          }
+          setLastProposedByUsername(d.proposed_by || null);
+          setAcceptedByUsername(d.accepted_by || null);
+          setDisputeStatus('accepted');
+        } else if (d && (d.status === 'none' || d.status === 'declined' || d.status === 'cancelled')) {
+          // Explicitly no active dispute -> clear proposal metadata and keep input at default (initial state already 20)
+          setLastProposedPercent(null);
+          setLastProposedBy(null);
+          setLastProposedByUsername(null);
+          setAcceptedByUsername(null);
+          setDisputeStatus(d.status as any);
+        } else {
+          // If backend omitted dispute or returned an unrecognized state; just preserve current UI state by avoiding jarring resets.
+        }
+        setIsRefreshing(false);
       } catch (error) {
         console.error("Error loading orders:", error);
-      } finally {
-        setLoading(false);
+        setIsRefreshing(false);
       }
     };
     loadOrder();
-  }, [currentUser, id]);
+  }, [currentUser, id, refreshTick]);
 
   
   const reset = () => {
@@ -174,8 +193,6 @@ export default function TxDetailsPage() {
 
     } catch (error:any) {
       toast.error('error adding new comment')
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -215,8 +232,6 @@ export default function TxDetailsPage() {
 
     } catch (error:any) {
       toast.error('error updating order')
-    } finally {
-      setLoading(false);
     }
   }
   
@@ -278,6 +293,20 @@ export default function TxDetailsPage() {
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg font-bold text-center" style={{ color: 'var(--default-primary-color)' }}>
           EscrowPi Transaction
         </h1>
+        <button
+          aria-label="Refresh"
+          className={`absolute right-0 inline-flex items-center justify-center h-9 w-9 rounded-full border ${isRefreshing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+          onClick={() => { if (!isRefreshing) { setIsRefreshing(true); setRefreshTick((t)=>t+1); } }}
+          disabled={isRefreshing}
+          title="Refresh"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isRefreshing ? 'animate-spin' : ''}>
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"></path>
+            <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14"></path>
+          </svg>
+        </button>
       </div>
 
       <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -288,9 +317,14 @@ export default function TxDetailsPage() {
           </div>
           <div className={`text-xs px-2 py-1 rounded border ${statusClasses[tx.status]}`}>{statusLabel[tx.status]}</div>
         </div>
-        <div className="mt-2 text-center">
-          <div className="text-sm text-gray-600">Payment transfer amount</div>
-          <div className="text-3xl font-bold">{tx.amount.toFixed(2)} <span className="text-xl align-top">Pi</span></div>
+        <div className="mt-1 flex items-end justify-between">
+          <div>
+            <div className="text-2xl font-bold">
+              {tx.amount.toFixed(2)} <span className="text-lg align-top">Pi</span>
+            </div>
+            <div className="text-xs text-gray-500">{tx.id}</div>
+          </div>
+          <div className="text-xs text-gray-500">{new Date(tx.date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</div>
         </div>
         {/* Disputed banner removed from top card; message is shown in Action area for consistency */}
 
@@ -354,13 +388,11 @@ export default function TxDetailsPage() {
           ); })()}
         >
           <div className="space-y-3 text-sm">
-            {(() => { const b = deriveBreakdown(tx.amount); const networkRefund = 0.01; const networkNotRefunded = 0.02; const refundTotal = b.base + b.completionStake + networkRefund; return (
+            {(() => { const b = deriveBreakdown(tx.amount); const networkRefund = 0.01; const networkNotRefunded = 0.01; const refundTotal = b.base + b.completionStake + networkRefund; return (
               <div className="space-y-2 rounded-lg p-3">
                 <div className="flex justify-between"><span>Payer amount (refunded):</span><span>{fmt(b.base)} pi</span></div>
                 <div className="flex justify-between"><span>Transaction Stake (refunded):</span><span>{fmt(b.completionStake)} pi</span></div>
                 <div className="flex justify-between"><span>Pi Network gas fees (refunded):</span><span>{fmt(networkRefund)} pi</span></div>
-                <div className="flex justify-between"><span>Pi Network gas fees (not refunded):</span><span>{fmt(networkNotRefunded)} pi</span></div>
-                <div className="flex justify-between"><span>EscrowPi fee (not refunded):</span><span>{fmt(b.escrowFee)} pi</span></div>
                 <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refundTotal)} pi</span></div>
               </div>
             ); })()}
@@ -393,20 +425,51 @@ export default function TxDetailsPage() {
                 <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(refund)} pi</span></div>
                 <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(payeeGets)} pi</span></div>
                 <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
-                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
-                <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+                { Math.abs(refundPercent - 100) < 1e-9 && <div className="flex justify-between"><span>Pi Network gas fees (refunded to payer):</span><span>{fmt(0.01)} pi</span></div> }
+                <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refund + b.completionStake + (Math.abs(refundPercent - 100) < 1e-9 ? 0.01 : 0))} pi</span></div>
                 <div className="pt-2">
                   <button
                     className="w-full py-2 rounded-lg text-sm font-semibold"
                     style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                    onClick={() => {
-                      const header: Comment = { author: myUsername, text: `User ${myUsername} has proposed a dispute resolution refund of ${fmt(refundPercent)}%.`, ts: new Date().toISOString() };
-                      setComments((prev) => [...prev, header]);
-                      setLastProposedPercent(refundPercent);
-                      setLastProposedBy(tx.myRole);
-                      setShowSendProposal(false);
-                      setActionBanner('Action completed successfully');
-                      setTimeout(() => setActionBanner(''), 2000);
+                    onClick={async () => {
+                      try {
+                        const percentVal = parseFloat(refundPercentStr);
+                        const chosen = Number.isFinite(percentVal) ? percentVal : refundPercent;
+                        const res = await proposeDispute(id, { percent: chosen });
+                        if (!res) {
+                          toast.error('Failed to propose dispute');
+                          return;
+                        }
+                        const refreshed = await fetchSingleUserOrder(id);
+                        if (refreshed) {
+                          const txItem = mapOrdersToTxItems([refreshed.order], currentUser?.pi_username as string);
+                          setTx(txItem[0] ?? null);
+                          setComments(mapCommentsToFrontend(refreshed.comments, currentUser?.pi_username as string));
+                          const d = refreshed.order.dispute;
+                          if (d && d.status === 'proposed') {
+                            if (typeof d.proposal_percent === 'number') {
+                              const pct = d.proposal_percent;
+                              setRefundPercent(pct);
+                              setRefundPercentStr(String(pct));
+                              setLastProposedPercent(pct);
+                            }
+                            const proposer = d.proposed_by;
+                            if (proposer) {
+                              const role = proposer === refreshed.order.sender_username ? 'payer' : 'payee';
+                              setLastProposedBy(role);
+                              setLastProposedByUsername(proposer);
+                            }
+                            setDisputeStatus('proposed');
+                            setAcceptedByUsername(null);
+                          }
+                        }
+                        setShowSendProposal(false);
+                        setActionBanner('Action completed successfully');
+                        setTimeout(() => setActionBanner(''), 2000);
+                        toast.success('Dispute proposal sent');
+                      } catch (e) {
+                        toast.error('Error sending dispute proposal');
+                      }
                     }}
                   >
                     Confirm
@@ -427,15 +490,54 @@ export default function TxDetailsPage() {
                 <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(refund)} pi</span></div>
                 <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(payeeGets)} pi</span></div>
                 <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
-                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
-                <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+                { Math.abs(percent - 100) < 1e-9 && <div className="flex justify-between"><span>Pi Network gas fees (refunded to payer):</span><span>{fmt(0.01)} pi</span></div> }
+                <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refund + b.completionStake + (Math.abs(percent - 100) < 1e-9 ? 0.01 : 0))} pi</span></div>
                 <div className="pt-2">
                   <button
                     className="w-full py-2 rounded-lg text-sm font-semibold"
                     style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                    onClick={() => {
-                      setShowAcceptProposal(false);
-                      handleAction('released');
+                    onClick={async () => {
+                      try {
+                        const res = await acceptDispute(id, {});
+                        if (!res) {
+                          toast.error('Failed to accept dispute');
+                          return;
+                        }
+                        const refreshed = await fetchSingleUserOrder(id);
+                        if (refreshed) {
+                          const txItem = mapOrdersToTxItems([refreshed.order], currentUser?.pi_username as string);
+                          setTx(txItem[0] ?? null);
+                          setComments(mapCommentsToFrontend(refreshed.comments, currentUser?.pi_username as string));
+                          const d = refreshed.order.dispute;
+                          if (d) {
+                            if (d.status === 'accepted') {
+                              if (typeof d.proposal_percent === 'number') {
+                                const pct = d.proposal_percent;
+                                setRefundPercent(pct);
+                                setRefundPercentStr(String(pct));
+                                setLastProposedPercent(pct);
+                              }
+                              setLastProposedByUsername(d.proposed_by || null);
+                              setAcceptedByUsername(d.accepted_by || null);
+                              setDisputeStatus('accepted');
+                            } else if (d.status === 'proposed') {
+                              setDisputeStatus('proposed');
+                            } else {
+                              setLastProposedPercent(null);
+                              setLastProposedBy(null);
+                              setLastProposedByUsername(null);
+                              setAcceptedByUsername(null);
+                              setDisputeStatus((d.status as any) || 'none');
+                            }
+                          }
+                        }
+                        setShowAcceptProposal(false);
+                        setActionBanner('Action completed successfully');
+                        setTimeout(() => setActionBanner(''), 2000);
+                        toast.success('Dispute proposal accepted');
+                      } catch (e) {
+                        toast.error('Error accepting dispute');
+                      }
                     }}
                   >
                     Confirm
@@ -624,7 +726,7 @@ export default function TxDetailsPage() {
             <div className="w-full max-w-md mx-auto">
               <div className="font-semibold mb-2 text-center">Action</div>
               {/* Single Action shell; height depends on status (larger for disputed only) */}
-              <div className={`w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] ${tx.status === 'disputed' ? 'h-[100px]' : 'h-[72px]'} overflow-hidden`}>
+              <div className={`w-full rounded-2xl p-2 bg-[#f5efe2] border border-[#2e6f4f] ${tx.status === 'disputed' ? 'min-h-[120px]' : 'h-[72px]'}`}>
                 {(() => {
                   const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'released';
                   if (isTerminal) {
@@ -658,7 +760,17 @@ export default function TxDetailsPage() {
                   }
                   // UC9: Both roles at Disputed
                   if (tx.status === 'disputed') {
-                    const matchesProposal = lastProposedPercent !== null && lastProposedBy !== tx.myRole && Math.abs(refundPercent - lastProposedPercent) < 1e-9;
+                    // Enable/disable rules per spec:
+                    // - Initially: no active proposal -> Send enabled, Accept disabled
+                    // - When one party proposes: proposer has both disabled; counterparty has both enabled
+                    const isAccepted = disputeStatus === 'accepted';
+                    const hasProposal = disputeStatus === 'proposed' && lastProposedPercent !== null;
+                    const isProposer = hasProposal && lastProposedBy === tx.myRole;
+                    const inputValid = refundPercent >= 0 && refundPercent <= 100;
+                    const equalsCurrent = hasProposal && lastProposedPercent !== null && Math.abs(refundPercent - lastProposedPercent) < 1e-9;
+                    const sendDisabled = isAccepted || !inputValid || (hasProposal && (isProposer || equalsCurrent));
+                    const acceptDisabled = isAccepted || !hasProposal || isProposer || !equalsCurrent;
+                    const inputDisabled = isAccepted || (hasProposal && isProposer);
                     return (
                       <div className="h-full flex flex-col">
                         {/* Top strip: Dispute Centre */}
@@ -666,12 +778,35 @@ export default function TxDetailsPage() {
                              style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}>
                           Dispute Centre
                         </div>
+                        {/* Show proposal status summary (always) */}
+                        <div className="text-center text-[11px] text-gray-700 mb-1">
+                          {isAccepted ? (
+                            <>
+                              Accepted proposal: <span className="font-semibold">{lastProposedPercent ?? 0}%</span>
+                              {lastProposedByUsername ? (
+                                <> — Proposed by: <span className="font-semibold">{lastProposedByUsername}</span></>
+                              ) : null}
+                              {acceptedByUsername ? (
+                                <> & Accepted by: <span className="font-semibold">{acceptedByUsername}</span></>
+                              ) : null}
+                            </>
+                          ) : hasProposal && lastProposedPercent !== null ? (
+                            <>
+                              Current proposal: <span className="font-semibold">{lastProposedPercent}%</span>
+                              {lastProposedByUsername ? (
+                                <> by <span className="font-semibold">{lastProposedByUsername}</span></>
+                              ) : null}
+                            </>
+                          ) : (
+                            <>Current proposal: <span className="font-semibold">None</span></>
+                          )}
+                        </div>
                         {/* Content row */}
                         <div className="flex-1 grid grid-cols-3 items-center gap-2">
                           <div className="flex justify-start">
                             <button
-                              disabled={matchesProposal}
-                              className={`px-3 h-12 rounded-full text-xs font-semibold ${!matchesProposal ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                              disabled={sendDisabled}
+                              className={`px-3 h-12 rounded-full text-xs font-semibold ${!sendDisabled ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                               onClick={() => setShowSendProposal(true)}
                             >
                               <span className="flex flex-col leading-tight items-center">
@@ -681,13 +816,14 @@ export default function TxDetailsPage() {
                             </button>
                           </div>
                           <div className="flex flex-col items-center justify-center leading-tight">
-                            <div className="text-[11px] text-gray-800">Proposed refund</div>
-                            <div className="text-[10px] text-gray-600">(0-100%)</div>
+                            <div className={`text-[11px] ${inputDisabled ? 'text-gray-400' : 'text-gray-800'}`}>Propose refund</div>
+                            <div className={`text-[10px] ${inputDisabled ? 'text-gray-400' : 'text-gray-600'}`}>(0-100%)</div>
                             <div className="flex items-baseline justify-center mt-0.5">
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                className="w-16 text-center bg-transparent border-0 outline-none text-[20px] font-bold"
+                                disabled={inputDisabled}
+                                className={`w-16 text-center bg-transparent border-0 outline-none text-[20px] font-bold ${inputDisabled ? 'text-gray-400 cursor-not-allowed' : ''}`}
                                 value={refundPercentStr}
                                 onChange={(e) => {
                                   let s = e.target.value || '';
@@ -731,13 +867,13 @@ export default function TxDetailsPage() {
                                   setRefundPercentStr(norm);
                                 }}
                               />
-                              <span className="ml-1 text-[16px] font-bold">%</span>
+                              <span className={`ml-1 text-[16px] font-bold ${inputDisabled ? 'text-gray-400' : ''}`}>%</span>
                             </div>
                           </div>
                           <div className="flex justify-end">
                             <button
-                              disabled={!matchesProposal}
-                              className={`px-3 h-12 rounded-full text-xs font-semibold ${matchesProposal ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                              disabled={acceptDisabled}
+                              className={`px-3 h-12 rounded-full text-xs font-semibold ${!acceptDisabled ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                               onClick={() => setShowAcceptProposal(true)}
                             >
                               <span className="flex flex-col leading-tight items-center">

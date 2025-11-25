@@ -80,3 +80,48 @@ export const updateOrderStatus = async (orderNo:string, status: TxStatus):Promis
     return null
   }
 }
+
+export const proposeDispute = async (
+  orderNo: string,
+  payload: { percent?: number; amount?: number; note?: string }
+): Promise<IOrder | null> => {
+  try {
+    const res = await axiosClient.post(`/orders/${orderNo}/disputes/propose`, payload);
+    if (res.status === 200) {
+      return res.data;
+    }
+    return null;
+  } catch (error: any) {
+    return null;
+  }
+};
+
+export const acceptDispute = async (
+  orderNo: string,
+  payload: { note?: string } = {}
+): Promise<IOrder | null> => {
+  try {
+    const res = await axiosClient.post(`/orders/${orderNo}/disputes/accept`, payload);
+    if (res.status === 200) {
+      return res.data;
+    }
+    return null;
+  } catch (error: any) {
+    return null;
+  }
+};
+
+export const declineDispute = async (
+  orderNo: string,
+  payload: { note?: string } = {}
+): Promise<IOrder | null> => {
+  try {
+    const res = await axiosClient.post(`/orders/${orderNo}/disputes/decline`, payload);
+    if (res.status === 200) {
+      return res.data;
+    }
+    return null;
+  } catch (error: any) {
+    return null;
+  }
+};
