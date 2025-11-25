@@ -90,21 +90,21 @@ export default function TxDetailsPage() {
   // Given total (top figure), derive base and fees using the same policy as the homepage
   const deriveBreakdown = (total: number) => {
     // Known constants
-    const network = 0.03;
+    const network = 0.02;
     // Find base such that total ≈ base + stake + network + escrow
     // stake = max(0.1*base, 1)
-    // escrow = max(0.03*base, 0.1)
+    // escrow = max(0.01*base, 0.1)
     let lo = 0, hi = Math.max(total, 1);
     for (let i = 0; i < 50; i++) {
       const mid = (lo + hi) / 2;
       const stake = Math.max(0.1 * mid, 1);
-      const escrow = Math.max(0.03 * mid, 0.1);
+      const escrow = Math.max(0.01 * mid, 0.1);
       const t = mid + stake + network + escrow;
       if (t > total) hi = mid; else lo = mid;
     }
     const base = lo;
     const completionStake = Math.max(0.1 * base, 1);
-    const escrowFee = Math.max(0.03 * base, 0.1);
+    const escrowFee = Math.max(0.01 * base, 0.1);
     const recomputedTotal = base + completionStake + network + escrowFee;
     return { base, completionStake, networkFees: network, escrowFee, total: recomputedTotal };
   };
@@ -388,13 +388,11 @@ export default function TxDetailsPage() {
           ); })()}
         >
           <div className="space-y-3 text-sm">
-            {(() => { const b = deriveBreakdown(tx.amount); const networkRefund = 0.01; const networkNotRefunded = 0.02; const refundTotal = b.base + b.completionStake + networkRefund; return (
+            {(() => { const b = deriveBreakdown(tx.amount); const networkRefund = 0.01; const networkNotRefunded = 0.01; const refundTotal = b.base + b.completionStake + networkRefund; return (
               <div className="space-y-2 rounded-lg p-3">
                 <div className="flex justify-between"><span>Payer amount (refunded):</span><span>{fmt(b.base)} pi</span></div>
                 <div className="flex justify-between"><span>Transaction Stake (refunded):</span><span>{fmt(b.completionStake)} pi</span></div>
                 <div className="flex justify-between"><span>Pi Network gas fees (refunded):</span><span>{fmt(networkRefund)} pi</span></div>
-                <div className="flex justify-between"><span>Pi Network gas fees (not refunded):</span><span>{fmt(networkNotRefunded)} pi</span></div>
-                <div className="flex justify-between"><span>EscrowPi fee (not refunded):</span><span>{fmt(b.escrowFee)} pi</span></div>
                 <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refundTotal)} pi</span></div>
               </div>
             ); })()}
@@ -427,8 +425,8 @@ export default function TxDetailsPage() {
                 <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(refund)} pi</span></div>
                 <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(payeeGets)} pi</span></div>
                 <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
-                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
-                <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+                { Math.abs(refundPercent - 100) < 1e-9 && <div className="flex justify-between"><span>Pi Network gas fees (refunded to payer):</span><span>{fmt(0.01)} pi</span></div> }
+                <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refund + b.completionStake + (Math.abs(refundPercent - 100) < 1e-9 ? 0.01 : 0))} pi</span></div>
                 <div className="pt-2">
                   <button
                     className="w-full py-2 rounded-lg text-sm font-semibold"
@@ -492,8 +490,8 @@ export default function TxDetailsPage() {
                 <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(refund)} pi</span></div>
                 <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(payeeGets)} pi</span></div>
                 <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
-                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
-                <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+                { Math.abs(percent - 100) < 1e-9 && <div className="flex justify-between"><span>Pi Network gas fees (refunded to payer):</span><span>{fmt(0.01)} pi</span></div> }
+                <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refund + b.completionStake + (Math.abs(percent - 100) < 1e-9 ? 0.01 : 0))} pi</span></div>
                 <div className="pt-2">
                   <button
                     className="w-full py-2 rounded-lg text-sm font-semibold"
