@@ -2,9 +2,13 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
+import TxHeaderCard from '@/components/TxHeaderCard';
+import TxDetailsBreakdown from '@/components/TxDetailsBreakdown';
+import AuditLogPreview from '@/components/AuditLogPreview';
+import CommentEditor from '@/components/CommentEditor';
 import { AppContext } from '@/context/AppContextProvider';
 import { fetchSingleUserOrder, updateOrderStatus, proposeDispute, acceptDispute } from '@/services/orderApi';
-import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend } from '@/lib';
+import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend, fmt, deriveBreakdown } from '@/lib';
 import { addComment } from '@/services/commentApi';
 import { payWithPi } from '@/config/payment';
 import { toast } from 'react-toastify';
@@ -76,38 +80,6 @@ export default function TxDetailsPage() {
       setLastProposedBy(null);
     }
   }, [tx?.status]);
-
-  // Helpers to display the popup breakdown like on the mock
-  const fmt = (n: number) => {
-    if (!Number.isFinite(n)) return '';
-    let s = n.toFixed(5);
-    if (s.includes('.')) {
-      s = s.replace(/0+$/g, '').replace(/\.$/, '');
-    }
-    return s;
-  };
-
-  // Given total (top figure), derive base and fees using the same policy as the homepage
-  const deriveBreakdown = (total: number) => {
-    // Known constants
-    const network = 0.02;
-    // Find base such that total ≈ base + stake + network + escrow
-    // stake = max(0.1*base, 1)
-    // escrow = max(0.01*base, 0.1)
-    let lo = 0, hi = Math.max(total, 1);
-    for (let i = 0; i < 50; i++) {
-      const mid = (lo + hi) / 2;
-      const stake = Math.max(0.1 * mid, 1);
-      const escrow = Math.max(0.01 * mid, 0.1);
-      const t = mid + stake + network + escrow;
-      if (t > total) hi = mid; else lo = mid;
-    }
-    const base = lo;
-    const completionStake = Math.max(0.1 * base, 1);
-    const escrowFee = Math.max(0.01 * base, 0.1);
-    const recomputedTotal = base + completionStake + network + escrowFee;
-    return { base, completionStake, networkFees: network, escrowFee, total: recomputedTotal };
-  };
 
   useEffect(() => {
     const loadOrder = async () => {
@@ -280,34 +252,18 @@ export default function TxDetailsPage() {
 
   return (
     <div className="space-y-4 md:space-y-3 lg:space-y-2 pb-[180px]">
-      <div className="relative flex items-center gap-2">
-        <button
-          aria-label="Go back"
-          className="inline-flex items-center justify-center h-9 w-9 rounded-full border hover:bg-gray-50"
-          onClick={() => router.push('/history')}
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-        </button>
-        <h1 className="absolute left-1/2 -translate-x-1/2 text-lg font-bold text-center" style={{ color: 'var(--default-primary-color)' }}>
-          EscrowPi Transaction
-        </h1>
-        <button
-          aria-label="Refresh"
-          className={`absolute right-0 inline-flex items-center justify-center h-9 w-9 rounded-full border ${isRefreshing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
-          onClick={() => { if (!isRefreshing) { setIsRefreshing(true); setRefreshTick((t)=>t+1); } }}
-          disabled={isRefreshing}
-          title="Refresh"
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isRefreshing ? 'animate-spin' : ''}>
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"></path>
-            <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14"></path>
-          </svg>
-        </button>
-      </div>
+      <TxHeaderCard
+        tx={tx}
+        arrowLabel={arrow}
+        isRefreshing={isRefreshing}
+        onBack={() => router.push('/history')}
+        onRefresh={() => {
+          if (!isRefreshing) {
+            setIsRefreshing(true);
+            setRefreshTick((t) => t + 1);
+          }
+        }}
+      />
 
       <div className="rounded-xl border bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
@@ -634,83 +590,29 @@ export default function TxDetailsPage() {
       )}
       </div>
 
-      <details className="group">
-        <summary className="cursor-pointer select-none font-semibold inline-flex items-center gap-2 mt-2">
-          <span>EscrowPi Transaction Details</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="transition-transform duration-200 group-open:rotate-90">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-        </summary>
-        <div className="mt-3 md:mt-2 text-sm">
-          {(() => { const b = deriveBreakdown(tx.amount); const refundNote = tx.myRole === 'payer' ? '(refunded to you at end)' : '(refunded to the payer at end)'; const getLabel = tx.myRole === 'payee' ? 'You get:' : 'Payee gets:'; return (
-            <div className="space-y-2 rounded-lg border border-black p-3">
-              <div className="flex justify-between"><span>{getLabel}</span><span>{fmt(b.base)} pi</span></div>
-              <div className="flex justify-between"><span>Transaction completion stake:</span><span>{fmt(b.completionStake)} pi</span></div>
-              <div className="text-[11px] text-gray-600">{refundNote}</div>
-              <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
-              <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
-              <div className="flex justify-between font-semibold"><span>Total:</span><span>{fmt(b.total)} pi</span></div>
-            </div>
-          ); })()}
-        </div>
-      </details>
+      <TxDetailsBreakdown tx={tx} />
 
       {/* Audit Log (outside details) */}
       <div className="mt-3 md:mt-2 space-y-3 md:space-y-2 lg:space-y-1 text-sm">
-        <div className="min-h-28" aria-label="Open all comments">
-          <div className="font-semibold mb-2 md:mb-1 text-center">Audit Log</div>
-          <div
-            ref={previewContainerRef}
-            className={`rounded-lg border p-3 md:p-2 bg-white h-40 overflow-hidden cursor-pointer hover:bg-gray-50 flex flex-col justify-start`}
-            onClick={() => setShowComments(true)}
-          >
-            {comments.length === 0 ? (
-              <div className="text-xs text-gray-600">No comments yet.</div>
-            ) : (
-              <div
-                ref={previewContentRef}
-                className="space-y-1 text-xs will-change-transform pb-3"
-                style={{ transform: `translateY(-${offsetPx}px)` }}
-              >
-                {comments.map((c, idx) => (
-                  <div key={idx} className="py-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-[13px]">{c.author}</span>
-                      <span className="text-[11px] text-gray-500">{new Date(c.ts).toLocaleString()}</span>
-                    </div>
-                    <div className="whitespace-pre-wrap break-words text-[13px]">{c.text}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <AuditLogPreview
+          comments={comments}
+          offsetPx={offsetPx}
+          previewContainerRef={previewContainerRef}
+          previewContentRef={previewContentRef}
+          onOpen={() => setShowComments(true)}
+        />
 
         {/* Add New Comment (outside details) - remains visible, but disabled for terminal states */}
         {(() => {
           // Disputed is not terminal for UC9
           const isTerminal = tx.status === 'cancelled' || tx.status === 'declined' || tx.status === 'released';
           return (
-            <div className="min-h-28">
-              <div className="font-semibold mb-2 md:mb-1 text-center">Add New Comment</div>
-              <textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                rows={4}
-                disabled={isTerminal}
-                placeholder={isTerminal ? 'Adding new comments is closed for this transaction.' : 'Type your comment. You can include contact info or links.'}
-                className={`w-full rounded border p-2 text-xs ${isTerminal ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`}
-              />
-              <div className="mt-2 flex justify-end">
-                <button
-                  disabled={isTerminal || newComment.trim().length === 0}
-                  className={`px-3 py-2 rounded text-xs font-semibold ${!isTerminal && newComment.trim().length ? 'bg-[var(--default-primary-color)] text-[var(--default-secondary-color)]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
-                  onClick={() => handleAddComment()}
-                >
-                  Add Comment
-                </button>
-              </div>
-            </div>
+            <CommentEditor
+              value={newComment}
+              onChange={setNewComment}
+              onSubmit={handleAddComment}
+              disabled={isTerminal}
+            />
           );
         })()}
       </div>
