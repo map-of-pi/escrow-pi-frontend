@@ -6,6 +6,17 @@ import TxHeaderCard from '@/components/TxHeaderCard';
 import TxDetailsBreakdown from '@/components/TxDetailsBreakdown';
 import AuditLogPreview from '@/components/AuditLogPreview';
 import CommentEditor from '@/components/CommentEditor';
+import TxDisputeConfirmModal from '@/components/tx-modals/TxDisputeConfirmModal';
+import TxCancelInitiatedModal from '@/components/tx-modals/TxCancelInitiatedModal';
+import TxCancelPaidModal from '@/components/tx-modals/TxCancelPaidModal';
+import TxReceivedModal from '@/components/tx-modals/TxReceivedModal';
+import TxFulfilledModal from '@/components/tx-modals/TxFulfilledModal';
+import TxCancelRequestModal from '@/components/tx-modals/TxCancelRequestModal';
+import TxRejectRequestModal from '@/components/tx-modals/TxRejectRequestModal';
+import TxAcceptRequestModal from '@/components/tx-modals/TxAcceptRequestModal';
+import TxCommentsModal from '@/components/tx-modals/TxCommentsModal';
+import TxSendProposalModal from '@/components/tx-modals/TxSendProposalModal';
+import TxAcceptProposalModal from '@/components/tx-modals/TxAcceptProposalModal';
 import { AppContext } from '@/context/AppContextProvider';
 import { fetchSingleUserOrder, updateOrderStatus, proposeDispute, acceptDispute } from '@/services/orderApi';
 import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend, fmt, deriveBreakdown } from '@/lib';
@@ -285,309 +296,168 @@ export default function TxDetailsPage() {
         {/* Disputed banner removed from top card; message is shown in Action area for consistency */}
 
         {/* UC8/UC6/UC7: Dispute popup (payee at fulfilled OR payer at paid/fulfilled) */}
-      {((tx.myRole === 'payee' && tx.status === 'fulfilled') || (tx.myRole === 'payer' && (tx.status === 'paid' || tx.status === 'fulfilled'))) && (
-        <Modal
-          open={showDispute}
-          onClose={() => setShowDispute(false)}
-          title={<div className="font-semibold text-center">Confirm you dispute the transaction</div>}
-        >
-          <div className="space-y-2 text-sm">
-            <div className="text-center text-gray-700">This will mark transaction status as disputed.</div>
-            <div className="pt-2">
-              <button
-                className="w-full py-2 rounded-lg text-sm font-semibold"
-                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={()=> handleAction('disputed')}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <TxDisputeConfirmModal
+        tx={tx}
+        open={showDispute}
+        onClose={() => setShowDispute(false)}
+        onConfirm={() => handleAction('disputed')}
+      />
 
       {/* UC0: Cancel popup (any transactions at initiated) */}
-      {tx.status === 'initiated' && (
-        <Modal
-          open={showCancel}
-          onClose={() => setShowCancel(false)}
-          title={<div className="font-semibold text-center">Confirm you wish to cancel the initiated transaction</div>}
-        >
-          <div className="space-y-2 text-sm">
-            <div className="text-center text-gray-700">This will cancel the initiated transaction.</div>
-            <div className="pt-2">
-              <button
-                className="w-full py-2 rounded-lg text-sm font-semibold"
-                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  setShowCancel(false);
-                  handleAction('cancelled');
-                }}
-              >
-                Confirm Cancel
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <TxCancelInitiatedModal
+        tx={tx}
+        open={showCancel}
+        onClose={() => setShowCancel(false)}
+        onConfirm={() => {
+          setShowCancel(false);
+          handleAction('cancelled');
+        }}
+      />
 
       {/* UC6a: Cancel popup (payer at paid) */}
-      {tx.myRole === 'payer' && tx.status === 'paid' && (
-        <Modal
-          open={showCancel}
-          onClose={() => setShowCancel(false)}
-          title={(() => { const b = deriveBreakdown(tx.amount); const networkRefund = 0.01; const refundTotal = b.base + b.completionStake + networkRefund; return (
-            <div className="text-center space-y-1">
-              <div className="font-semibold">Confirm cancel transaction and get refund</div>
-              <div className="text-2xl font-bold">{fmt(refundTotal)} pi</div>
-            </div>
-          ); })()}
-        >
-          <div className="space-y-3 text-sm">
-            {(() => { const b = deriveBreakdown(tx.amount); const networkRefund = 0.01; const networkNotRefunded = 0.01; const refundTotal = b.base + b.completionStake + networkRefund; return (
-              <div className="space-y-2 rounded-lg p-3">
-                <div className="flex justify-between"><span>Payer amount (refunded):</span><span>{fmt(b.base)} pi</span></div>
-                <div className="flex justify-between"><span>Transaction Stake (refunded):</span><span>{fmt(b.completionStake)} pi</span></div>
-                <div className="flex justify-between"><span>Pi Network gas fees (refunded):</span><span>{fmt(networkRefund)} pi</span></div>
-                <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refundTotal)} pi</span></div>
-              </div>
-            ); })()}
-            <div className="pt-2">
-              <button
-                className="w-full py-2 rounded-lg text-sm font-semibold"
-                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  setShowCancel(false);
-                  handleAction('cancelled');
-                }}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <TxCancelPaidModal
+        tx={tx}
+        open={showCancel}
+        onClose={() => setShowCancel(false)}
+        onConfirm={() => {
+          setShowCancel(false);
+          handleAction('cancelled');
+        }}
+      />
 
       {/* UC9: Send Proposal popup (payer/payee at disputed) */}
-      {tx.status === 'disputed' && (
-        <>
-          <Modal
-            open={showSendProposal}
-            onClose={() => setShowSendProposal(false)}
-            title={<div className="font-semibold text-center">You propose dispute resolution refund {refundPercent}%</div>}
-          >
-            {(() => { const b = deriveBreakdown(tx.amount); const refund = (b.base * refundPercent) / 100; const payeeGets = b.base - refund; return (
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(refund)} pi</span></div>
-                <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(payeeGets)} pi</span></div>
-                <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
-                { Math.abs(refundPercent - 100) < 1e-9 && <div className="flex justify-between"><span>Pi Network gas fees (refunded to payer):</span><span>{fmt(0.01)} pi</span></div> }
-                <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refund + b.completionStake + (Math.abs(refundPercent - 100) < 1e-9 ? 0.01 : 0))} pi</span></div>
-                <div className="pt-2">
-                  <button
-                    className="w-full py-2 rounded-lg text-sm font-semibold"
-                    style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                    onClick={async () => {
-                      try {
-                        const percentVal = parseFloat(refundPercentStr);
-                        const chosen = Number.isFinite(percentVal) ? percentVal : refundPercent;
-                        const res = await proposeDispute(id, { percent: chosen });
-                        if (!res) {
-                          toast.error('Failed to propose dispute');
-                          return;
-                        }
-                        const refreshed = await fetchSingleUserOrder(id);
-                        if (refreshed) {
-                          const txItem = mapOrdersToTxItems([refreshed.order], currentUser?.pi_username as string);
-                          setTx(txItem[0] ?? null);
-                          setComments(mapCommentsToFrontend(refreshed.comments, currentUser?.pi_username as string));
-                          const d = refreshed.order.dispute;
-                          if (d && d.status === 'proposed') {
-                            if (typeof d.proposal_percent === 'number') {
-                              const pct = d.proposal_percent;
-                              setRefundPercent(pct);
-                              setRefundPercentStr(String(pct));
-                              setLastProposedPercent(pct);
-                            }
-                            const proposer = d.proposed_by;
-                            if (proposer) {
-                              const role = proposer === refreshed.order.sender_username ? 'payer' : 'payee';
-                              setLastProposedBy(role);
-                              setLastProposedByUsername(proposer);
-                            }
-                            setDisputeStatus('proposed');
-                            setAcceptedByUsername(null);
-                          }
-                        }
-                        setShowSendProposal(false);
-                        setActionBanner('Action completed successfully');
-                        setTimeout(() => setActionBanner(''), 2000);
-                        toast.success('Dispute proposal sent');
-                      } catch (e) {
-                        toast.error('Error sending dispute proposal');
-                      }
-                    }}
-                  >
-                    Confirm
-                  </button>
-                </div>
-              </div>
-            ); })()}
-          </Modal>
+      <TxSendProposalModal
+        tx={tx}
+        open={showSendProposal}
+        onClose={() => setShowSendProposal(false)}
+        refundPercent={refundPercent}
+        refundPercentStr={refundPercentStr}
+        onConfirm={async () => {
+          try {
+            const percentVal = parseFloat(refundPercentStr);
+            const chosen = Number.isFinite(percentVal) ? percentVal : refundPercent;
+            const res = await proposeDispute(id, { percent: chosen });
+            if (!res) {
+              toast.error('Failed to propose dispute');
+              return;
+            }
+            const refreshed = await fetchSingleUserOrder(id);
+            if (refreshed) {
+              const txItem = mapOrdersToTxItems([refreshed.order], currentUser?.pi_username as string);
+              setTx(txItem[0] ?? null);
+              setComments(mapCommentsToFrontend(refreshed.comments, currentUser?.pi_username as string));
+              const d = refreshed.order.dispute;
+              if (d && d.status === 'proposed') {
+                if (typeof d.proposal_percent === 'number') {
+                  const pct = d.proposal_percent;
+                  setRefundPercent(pct);
+                  setRefundPercentStr(String(pct));
+                  setLastProposedPercent(pct);
+                }
+                const proposer = d.proposed_by;
+                if (proposer) {
+                  const role = proposer === refreshed.order.sender_username ? 'payer' : 'payee';
+                  setLastProposedBy(role);
+                  setLastProposedByUsername(proposer);
+                }
+                setDisputeStatus('proposed');
+                setAcceptedByUsername(null);
+              }
+            }
+            setShowSendProposal(false);
+            setActionBanner('Action completed successfully');
+            setTimeout(() => setActionBanner(''), 2000);
+            toast.success('Dispute proposal sent');
+          } catch (e) {
+            toast.error('Error sending dispute proposal');
+          }
+        }}
+      />
 
-          {/* Accept Proposal popup (payer/payee at disputed) */}
-          <Modal
-            open={showAcceptProposal}
-            onClose={() => setShowAcceptProposal(false)}
-            title={<div className="font-semibold text-center">You accept dispute resolution refund {lastProposedPercent ?? refundPercent}%</div>}
-          >
-            {(() => { const b = deriveBreakdown(tx.amount); const percent = (lastProposedPercent ?? refundPercent); const refund = (b.base * percent) / 100; const payeeGets = b.base - refund; return (
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(refund)} pi</span></div>
-                <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(payeeGets)} pi</span></div>
-                <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
-                { Math.abs(percent - 100) < 1e-9 && <div className="flex justify-between"><span>Pi Network gas fees (refunded to payer):</span><span>{fmt(0.01)} pi</span></div> }
-                <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refund + b.completionStake + (Math.abs(percent - 100) < 1e-9 ? 0.01 : 0))} pi</span></div>
-                <div className="pt-2">
-                  <button
-                    className="w-full py-2 rounded-lg text-sm font-semibold"
-                    style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                    onClick={async () => {
-                      try {
-                        const res = await acceptDispute(id, {});
-                        if (!res) {
-                          toast.error('Failed to accept dispute');
-                          return;
-                        }
-                        const refreshed = await fetchSingleUserOrder(id);
-                        if (refreshed) {
-                          const txItem = mapOrdersToTxItems([refreshed.order], currentUser?.pi_username as string);
-                          setTx(txItem[0] ?? null);
-                          setComments(mapCommentsToFrontend(refreshed.comments, currentUser?.pi_username as string));
-                          const d = refreshed.order.dispute;
-                          if (d) {
-                            if (d.status === 'accepted') {
-                              if (typeof d.proposal_percent === 'number') {
-                                const pct = d.proposal_percent;
-                                setRefundPercent(pct);
-                                setRefundPercentStr(String(pct));
-                                setLastProposedPercent(pct);
-                              }
-                              setLastProposedByUsername(d.proposed_by || null);
-                              setAcceptedByUsername(d.accepted_by || null);
-                              setDisputeStatus('accepted');
-                            } else if (d.status === 'proposed') {
-                              setDisputeStatus('proposed');
-                            } else {
-                              setLastProposedPercent(null);
-                              setLastProposedBy(null);
-                              setLastProposedByUsername(null);
-                              setAcceptedByUsername(null);
-                              setDisputeStatus((d.status as any) || 'none');
-                            }
-                          }
-                        }
-                        setShowAcceptProposal(false);
-                        setActionBanner('Action completed successfully');
-                        setTimeout(() => setActionBanner(''), 2000);
-                        toast.success('Dispute proposal accepted');
-                      } catch (e) {
-                        toast.error('Error accepting dispute');
-                      }
-                    }}
-                  >
-                    Confirm
-                  </button>
-                </div>
-              </div>
-            ); })()}
-          </Modal>
-        </>
-      )}
+      {/* Accept Proposal popup (payer/payee at disputed) */}
+      <TxAcceptProposalModal
+        tx={tx}
+        open={showAcceptProposal}
+        onClose={() => setShowAcceptProposal(false)}
+        lastProposedPercent={lastProposedPercent}
+        refundPercent={refundPercent}
+        onConfirm={async () => {
+          try {
+            const res = await acceptDispute(id, {});
+            if (!res) {
+              toast.error('Failed to accept dispute');
+              return;
+            }
+            const refreshed = await fetchSingleUserOrder(id);
+            if (refreshed) {
+              const txItem = mapOrdersToTxItems([refreshed.order], currentUser?.pi_username as string);
+              setTx(txItem[0] ?? null);
+              setComments(mapCommentsToFrontend(refreshed.comments, currentUser?.pi_username as string));
+              const d = refreshed.order.dispute;
+              if (d) {
+                if (d.status === 'accepted') {
+                  if (typeof d.proposal_percent === 'number') {
+                    const pct = d.proposal_percent;
+                    setRefundPercent(pct);
+                    setRefundPercentStr(String(pct));
+                    setLastProposedPercent(pct);
+                  }
+                  setLastProposedByUsername(d.proposed_by || null);
+                  setAcceptedByUsername(d.accepted_by || null);
+                  setDisputeStatus('accepted');
+                } else if (d.status === 'proposed') {
+                  setDisputeStatus('proposed');
+                } else {
+                  setLastProposedPercent(null);
+                  setLastProposedBy(null);
+                  setLastProposedByUsername(null);
+                  setAcceptedByUsername(null);
+                  setDisputeStatus((d.status as any) || 'none');
+                }
+              }
+            }
+            setShowAcceptProposal(false);
+            setActionBanner('Action completed successfully');
+            setTimeout(() => setActionBanner(''), 2000);
+            toast.success('Dispute proposal accepted');
+          } catch (e) {
+            toast.error('Error accepting dispute');
+          }
+        }}
+      />
 
       {/* UC7: Received popup (payer at fulfilled) */}
-      {tx.myRole === 'payer' && tx.status === 'fulfilled' && (
-        <Modal
-          open={showReceived}
-          onClose={() => setShowReceived(false)}
-          title={<div className="font-semibold text-center">Confirm purchased item(s) received and release payment</div>}
-        >
-          <div className="space-y-3 text-sm">
-            <div className="text-center text-gray-700">This will mark transaction status as {statusLabel['released']}.</div>
-            {(() => { const b = deriveBreakdown(tx.amount); return (
-              <div className="space-y-2 rounded-lg border border-black p-3">
-                <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(b.base)} pi</span></div>
-                <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
-                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
-                <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
-                <div className="flex justify-between font-semibold"><span>Total:</span><span>{fmt(b.total)} pi</span></div>
-              </div>
-            ); })()}
-            <div className="pt-2">
-              <button
-                className="w-full py-2 rounded-lg text-sm font-semibold"
-                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  setShowReceived(false);
-                  handleAction('released');
-                }}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <TxReceivedModal
+        tx={tx}
+        open={showReceived}
+        onClose={() => setShowReceived(false)}
+        onConfirm={() => {
+          setShowReceived(false);
+          handleAction('released');
+        }}
+      />
 
       {/* UC5: Fulfilled popup (payee at paid) */}
-      {tx.myRole === 'payee' && tx.status === 'paid' && (
-        <Modal
-          open={showFulfilled}
-          onClose={() => setShowFulfilled(false)}
-          title={<div className="font-semibold text-center">Confirm you have fulfilled the purchase</div>}
-        >
-          <div className="space-y-2 text-sm">
-            <div className="text-center text-gray-700">This will mark transaction status as fulfilled.</div>
-            <div className="pt-2">
-              <button
-                className="w-full py-2 rounded-lg text-sm font-semibold"
-                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  setShowFulfilled(false);
-                  handleAction('fulfilled');
-                }}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <TxFulfilledModal
+        tx={tx}
+        open={showFulfilled}
+        onClose={() => setShowFulfilled(false)}
+        onConfirm={() => {
+          setShowFulfilled(false);
+          handleAction('fulfilled');
+        }}
+      />
 
       {/* UC3: Cancel popup (payee at requested) */}
-      {tx.myRole === 'payee' && tx.status === 'requested' && (
-        <Modal
-          open={showCancel}
-          onClose={() => setShowCancel(false)}
-          title={<div className="font-semibold text-center">Confirm you cancel the request to pay pi</div>}
-        >
-          <div className="space-y-2 text-sm">
-            <div className="text-center text-gray-700">This will cancel the current Pi transfer request.</div>
-            <div className="pt-2">
-              <button
-                className="w-full py-2 rounded-lg text-sm font-semibold"
-                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={() => {
-                  setShowCancel(false);
-                  handleAction('cancelled');
-                }}
-              >
-                Confirm Cancel
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <TxCancelRequestModal
+        tx={tx}
+        open={showCancel}
+        onClose={() => setShowCancel(false)}
+        onConfirm={() => {
+          setShowCancel(false);
+          handleAction('cancelled');
+        }}
+      />
       </div>
 
       <TxDetailsBreakdown tx={tx} />
@@ -948,115 +818,56 @@ export default function TxDetailsPage() {
       )}
 
       {/* UC2: Reject popup (payer at requested) */}
-      {tx.myRole === 'payer' && tx.status === 'requested' && (
-        <Modal
-          open={showReject}
-          onClose={() => setShowReject(false)}
-          title={
-            <div className="text-center space-y-1">
-              <div className="font-semibold">Confirm you reject the request to pay pi</div>
-            </div>
-          }
-        >
-          <div className="space-y-2 text-sm">
-            <div className="pt-2">
-              <button
-                className="w-full py-2 rounded-lg text-sm font-semibold bg-red-100 text-red-700 border border-red-200"
-                onClick={() => {
-                  setShowReject(false);
-                  handleAction('declined');
-                }}
-              >
-                Confirm Reject
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <TxRejectRequestModal
+        tx={tx}
+        open={showReject}
+        onClose={() => setShowReject(false)}
+        onConfirm={() => {
+          setShowReject(false);
+          handleAction('declined');
+        }}
+      />
 
       {/* UC2: Accept popup (payer at requested) */}
-      {tx.myRole === 'payer' && tx.status === 'requested' && (
-        <Modal
-          open={showAccept}
-          onClose={() => setShowAccept(false)}
-          title={
-            <div className="text-center space-y-1">
-              <div className="font-semibold">Confirm you accept the request to pay pi</div>
-              <div className="text-2xl font-bold">{fmt(deriveBreakdown(tx.amount).total)} pi</div>
-            </div>
+      <TxAcceptRequestModal
+        tx={tx}
+        open={showAccept}
+        onClose={() => setShowAccept(false)}
+        onConfirm={async () => {
+          try {
+            setShowAccept(false);
+            if (!currentUser?.pi_username) {
+              toast.error('Please sign in');
+              return;
+            }
+            const paymentData = {
+              amount: tx.amount,
+              memo: `Escrow payment between ${currentUser.pi_username} and ${tx.counterparty}`,
+              metadata: { orderType: 'send', order_no: id },
+            };
+            await payWithPi(
+              paymentData,
+              () => {
+                setActionBanner('Payment completed successfully');
+                setTimeout(() => setActionBanner(''), 2000);
+                router.push('/history');
+              },
+              () => {
+                toast.error('Payment error');
+              }
+            );
+          } catch (e) {
+            toast.error('Payment error');
           }
-        >
-          {(() => { const b = deriveBreakdown(tx.amount); return (
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span>They get:</span><span>{fmt(b.base)} pi</span></div>
-            <div className="flex justify-between"><span>Transaction completion stake:</span><span>{fmt(b.completionStake)} pi</span></div>
-            <div className="text-[11px] text-gray-600">(refunded to you at end)</div>
-            <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
-            <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
-            <div className="pt-2">
-              <button
-                className="w-full py-2 rounded-lg text-sm font-semibold"
-                style={{ background: 'var(--default-primary-color)', color: 'var(--default-secondary-color)' }}
-                onClick={async () => {
-                  try {
-                    setShowAccept(false);
-                    if (!currentUser?.pi_username) {
-                      toast.error('Please sign in');
-                      return;
-                    }
-                    const paymentData = {
-                      amount: tx.amount,
-                      memo: `Escrow payment between ${currentUser.pi_username} and ${tx.counterparty}`,
-                      metadata: { orderType: 'send', order_no: id },
-                    };
-                    await payWithPi(
-                      paymentData,
-                      () => {
-                        setActionBanner('Payment completed successfully');
-                        setTimeout(() => setActionBanner(''), 2000);
-                        router.push('/history');
-                      },
-                      () => {
-                        toast.error('Payment error');
-                      }
-                    );
-                  } catch (e) {
-                    toast.error('Payment error');
-                  }
-                }}
-              >
-                Confirm Accept
-              </button>
-            </div>
-          </div> ); })()}
-        </Modal>
-      )}
+        }}
+      />
 
       {/* Full-screen reader for all comments */}
-      {showComments && (
-        <Modal
-          open={showComments}
-          onClose={() => setShowComments(false)}
-          title={<div className="font-semibold">Audit Log</div>}
-          fullScreen
-        >
-          <div className="space-y-2 text-sm overflow-auto pr-1">
-            {comments.length === 0 ? (
-              <div className="text-xs text-gray-600">No comments yet.</div>
-            ) : (
-              comments.map((c, i) => (
-                <div key={i} className="py-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-[13px]">{c.author}</span>
-                    <span className="text-[11px] text-gray-500">{new Date(c.ts).toLocaleString()}</span>
-                  </div>
-                  <div className="whitespace-pre-wrap break-words text-[13px]">{c.text}</div>
-                </div>
-              ))
-            )}
-          </div>
-        </Modal>
-      )}
+      <TxCommentsModal
+        open={showComments}
+        onClose={() => setShowComments(false)}
+        comments={comments}
+      />
     </div>
   );
 }
