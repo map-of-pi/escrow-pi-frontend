@@ -2,6 +2,7 @@
 
 import React from "react";
 import Modal from "@/components/Modal";
+import ConfirmButton from "@/components/ConfirmButton";
 import { TxItem } from "@/lib";
 
 interface TxCancelRequestModalProps {
@@ -17,7 +18,7 @@ export default function TxCancelRequestModal({
   onClose,
   onConfirm,
 }: TxCancelRequestModalProps) {
-  if (!(tx.myRole === "payee" && tx.status === "requested")) return null;
+  if (tx.myRole !== "payee" || tx.status !== "requested") return null;
 
   return (
     <Modal
@@ -34,7 +35,7 @@ export default function TxCancelRequestModal({
           This will cancel the current Pi transfer request.
         </div>
         <div className="pt-2">
-          <button
+          <ConfirmButton
             className="w-full py-2 rounded-lg text-sm font-semibold"
             style={{
               background: "var(--default-primary-color)",
@@ -43,7 +44,7 @@ export default function TxCancelRequestModal({
             onClick={onConfirm}
           >
             Confirm Cancel
-          </button>
+          </ConfirmButton>
         </div>
       </div>
     </Modal>

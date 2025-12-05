@@ -2,6 +2,7 @@
 
 import React from "react";
 import Modal from "@/components/Modal";
+import ConfirmButton from "@/components/ConfirmButton";
 import { TxItem } from "@/lib";
 
 interface TxFulfilledModalProps {
@@ -29,7 +30,7 @@ export default function TxFulfilledModal({ tx, open, onClose, onConfirm }: TxFul
           This will mark transaction status as fulfilled.
         </div>
         <div className="pt-2">
-          <button
+          <ConfirmButton
             className="w-full py-2 rounded-lg text-sm font-semibold"
             style={{
               background: "var(--default-primary-color)",
@@ -38,7 +39,7 @@ export default function TxFulfilledModal({ tx, open, onClose, onConfirm }: TxFul
             onClick={onConfirm}
           >
             Confirm
-          </button>
+          </ConfirmButton>
         </div>
       </div>
     </Modal>

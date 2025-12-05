@@ -2,6 +2,7 @@
 
 import React from "react";
 import Modal from "@/components/Modal";
+import ConfirmButton from "@/components/ConfirmButton";
 import { TxItem } from "@/lib";
 
 interface TxRejectRequestModalProps {
@@ -33,12 +34,12 @@ export default function TxRejectRequestModal({
     >
       <div className="space-y-2 text-sm">
         <div className="pt-2">
-          <button
+          <ConfirmButton
             className="w-full py-2 rounded-lg text-sm font-semibold bg-red-100 text-red-700 border border-red-200"
             onClick={onConfirm}
           >
             Confirm Reject
-          </button>
+          </ConfirmButton>
         </div>
       </div>
     </Modal>

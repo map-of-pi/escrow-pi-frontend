@@ -2,6 +2,7 @@
 
 import React from "react";
 import Modal from "@/components/Modal";
+import ConfirmButton from "@/components/ConfirmButton";
 import { TxItem } from "@/lib";
 
 interface TxCancelInitiatedModalProps {
@@ -34,7 +35,7 @@ export default function TxCancelInitiatedModal({
           This will cancel the initiated transaction.
         </div>
         <div className="pt-2">
-          <button
+          <ConfirmButton
             className="w-full py-2 rounded-lg text-sm font-semibold"
             style={{
               background: "var(--default-primary-color)",
@@ -43,7 +44,7 @@ export default function TxCancelInitiatedModal({
             onClick={onConfirm}
           >
             Confirm Cancel
-          </button>
+          </ConfirmButton>
         </div>
       </div>
     </Modal>

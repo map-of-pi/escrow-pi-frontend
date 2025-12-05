@@ -2,6 +2,7 @@
 
 import React from "react";
 import Modal from "@/components/Modal";
+import ConfirmButton from "@/components/ConfirmButton";
 import { TxItem, TxStatus } from "@/lib";
 
 interface TxDisputeConfirmModalProps {
@@ -34,7 +35,7 @@ export default function TxDisputeConfirmModal({
           This will mark transaction status as disputed.
         </div>
         <div className="pt-2">
-          <button
+          <ConfirmButton
             className="w-full py-2 rounded-lg text-sm font-semibold"
             style={{
               background: "var(--default-primary-color)",
@@ -43,7 +44,7 @@ export default function TxDisputeConfirmModal({
             onClick={onConfirm}
           >
             Confirm
-          </button>
+          </ConfirmButton>
         </div>
       </div>
     </Modal>

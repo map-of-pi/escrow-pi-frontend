@@ -2,6 +2,7 @@
 
 import React from "react";
 import Modal from "@/components/Modal";
+import ConfirmButton from "@/components/ConfirmButton";
 import { TxItem, fmt, deriveBreakdown } from "@/lib";
 
 interface TxSendProposalModalProps {
@@ -63,18 +64,16 @@ export default function TxSendProposalModal({
           <span>{fmt(totalRefunded)} pi</span>
         </div>
         <div className="pt-2">
-          <button
+          <ConfirmButton
             className="w-full py-2 rounded-lg text-sm font-semibold"
             style={{
               background: "var(--default-primary-color)",
               color: "var(--default-secondary-color)",
             }}
-            onClick={async () => {
-              await onConfirm();
-            }}
+            onClick={onConfirm}
           >
             Confirm
-          </button>
+          </ConfirmButton>
         </div>
       </div>
     </Modal>
