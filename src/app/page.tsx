@@ -110,8 +110,8 @@ export default function HomePage() {
   const fees = useMemo(() => {
     const base = typeof modalAmount === 'number' ? modalAmount : 0;
     const completionStake = Math.max(base * 0.1, 1);
-    const networkFees = 0.03; // static for mock
-    const escrowFee = Math.max(base * 0.03, 0.1);
+    const networkFees = 0.02; // As per updated requirement
+    const escrowFee = Math.max(base * 0.01, 0.1);
     // Screenshot behavior: total includes completion stake
     const total = base + completionStake + networkFees + escrowFee;
     return { amt: base, completionStake, networkFees, escrowFee, total };

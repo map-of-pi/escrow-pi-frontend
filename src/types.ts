@@ -24,7 +24,27 @@ export type IOrder = {
   order_no: string;
   status: string;
   createdAt: Date;
-  updatedAt: Date
+  updatedAt: Date;
+  dispute?: {
+    is_disputed?: boolean;
+    status?: 'none' | 'proposed' | 'accepted' | 'declined' | 'cancelled';
+    proposal_percent?: number;
+    proposal_amount?: number;
+    proposed_by?: string;
+    proposed_at?: string | Date;
+    accepted_by?: string;
+    accepted_at?: string | Date;
+    declined_by?: string;
+    declined_at?: string | Date;
+    history?: Array<{
+      action: 'proposed' | 'accepted' | 'declined' | 'cancelled';
+      by: string;
+      at: string | Date;
+      percent?: number;
+      amount?: number;
+      note?: string;
+    }>;
+  };
 }
 
 export interface IComment {
