@@ -152,6 +152,14 @@ export default function HomePage() {
     setOrderNo('')
   }
 
+  const normalizePiName = (value: string) =>
+    value.trim().replace(/^@/, '');
+
+  const isSelfCounterparty = (value: string) => {
+    if (!currentUser?.pi_username) return false;
+    return normalizePiName(value) === normalizePiName(currentUser.pi_username);
+  };
+
   // Validate inputs and open the appropriate modal
   const handleOpen = async (orderType: OrderTypeEnum) => {
     const name = counterparty.trim();
@@ -160,6 +168,10 @@ export default function HomePage() {
 
     if (!name) {
       toast.error(orderType === OrderTypeEnum.Send ? 'Please enter Payee Pioneer Name' : 'Please enter Payer Pioneer Name');
+      return;
+    }
+    if (isSelfCounterparty(name)) {
+      toast.error('You cannot create an EscrowPi transaction with yourself');
       return;
     }
     if (!desc) {
@@ -193,6 +205,10 @@ export default function HomePage() {
       toast.error('SCREEN.MEMBERSHIP.VALIDATION.USER_NOT_LOGGED_IN_PAYMENT_MESSAGE')
       return 
     }
+    if (isSelfCounterparty(counterparty)) {
+      toast.error('You cannot create an EscrowPi transaction with yourself');
+      return;
+    }
     setIsSaveLoading(true)
 
     // Create order with status initiated; store total amount
@@ -223,6 +239,10 @@ export default function HomePage() {
 
   const handleRequest = async () => {
     if (!currentUser) return
+    if (isSelfCounterparty(counterparty)) {
+      toast.error('You cannot create an EscrowPi transaction with yourself');
+      return;
+    }
     setIsSaveLoading(true)
     // Create order with status initiated; store total amount
     const total = fees.total;
