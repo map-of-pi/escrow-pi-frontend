@@ -134,15 +134,38 @@ export default function Navbar() {
                 aria-label="Back"
                 className="w-full h-full flex items-center justify-center"
                 onClick={(e) => {
+                  const goHome = () => {
+                    try {
+                      router.push('/?skipSplash=1');
+                    } catch {
+                      window.location.href = '/?skipSplash=1';
+                    }
+                  };
                   try {
                     e.preventDefault();
                     if (typeof window !== 'undefined') {
                       window.sessionStorage.setItem('escrowpi:cameFromInternalNav', '1');
                     }
-                    router.push(backHref);
+                    if (isTxDetails || isHistoryList) {
+                      router.push(backHref);
+                      return;
+                    }
+                    if (typeof window === 'undefined') {
+                      goHome();
+                      return;
+                    }
+                    const canGoBack = window.history.length > 1;
+                    if (canGoBack) {
+                      window.history.back();
+                    } else {
+                      goHome();
+                    }
                   } catch {
-                    // As a last resort, hard navigate
-                    window.location.href = backHref;
+                    if (isTxDetails || isHistoryList) {
+                      window.location.href = backHref;
+                    } else {
+                      goHome();
+                    }
                   }
                 }}
               >

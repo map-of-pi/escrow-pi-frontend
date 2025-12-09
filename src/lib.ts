@@ -96,3 +96,37 @@ export function mapCommentsToFrontend(comments: IComment[], authUsername: string
   return comments.map((comment) => mapCommentToFrontend(comment, authUsername));
 }
 
+// Helpers to display breakdown figures consistently across the app
+export const fmt = (n: number): string => {
+  if (!Number.isFinite(n)) return "";
+  let s = n.toFixed(5);
+  if (s.includes(".")) {
+    s = s.replace(/0+$/g, "").replace(/\.$/, "");
+  }
+  return s;
+};
+
+// Given total (top figure), derive base and fees using the same policy as the homepage
+export const deriveBreakdown = (total: number) => {
+  // Known constants
+  const network = 0.02;
+  // Find base such that total ≈ base + stake + network + escrow
+  // stake = max(0.1*base, 1)
+  // escrow = max(0.01*base, 0.1)
+  let lo = 0,
+    hi = Math.max(total, 1);
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    const stake = Math.max(0.1 * mid, 1);
+    const escrow = Math.max(0.01 * mid, 0.1);
+    const t = mid + stake + network + escrow;
+    if (t > total) hi = mid;
+    else lo = mid;
+  }
+  const base = lo;
+  const completionStake = Math.max(0.1 * base, 1);
+  const escrowFee = Math.max(0.01 * base, 0.1);
+  const recomputedTotal = base + completionStake + network + escrowFee;
+  return { base, completionStake, networkFees: network, escrowFee, total: recomputedTotal };
+};
+
