@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Modal from '@/components/Modal';
 import TxHeaderCard from '@/components/TxHeaderCard';
 import TxDetailsBreakdown from '@/components/TxDetailsBreakdown';
 import AuditLogPreview from '@/components/AuditLogPreview';
@@ -92,6 +91,55 @@ export default function TxDetailsPage() {
       setLastProposedBy(null);
     }
   }, [tx?.status]);
+
+  const handleRefundInputChange = (raw: string) => {
+    let s = raw ?? '';
+    s = s.replace(/[^0-9.]/g, '');
+    if ((s.match(/\./g) || []).length > 1) {
+      const [first, ...rest] = s.split('.');
+      s = `${first}.${rest.join('')}`;
+    }
+    if (s.startsWith('.')) {
+      s = `0${s}`;
+    }
+    const parts = s.split('.');
+    if (parts.length === 2 && parts[1].length > 2) {
+      parts[1] = parts[1].slice(0, 2);
+      s = `${parts[0]}.${parts[1]}`;
+    }
+    if (parts[0]) {
+      parts[0] = parts[0].replace(/^0+(?=\d)/, '') || '0';
+      s = parts.length === 2 ? `${parts[0]}.${parts[1] ?? ''}` : parts[0];
+    }
+    if (s !== '' && s !== '.') {
+      let n = Number(s);
+      if (!Number.isFinite(n)) n = 0;
+      if (n > 100) {
+        n = 100;
+        s = '100';
+      } else if (n < 0) {
+        n = 0;
+        s = '0';
+      }
+      setRefundPercent(n);
+    } else {
+      setRefundPercent(0);
+    }
+    setRefundPercentStr(s);
+  };
+
+  const handleRefundInputBlur = () => {
+    let s = refundPercentStr;
+    if (s === '' || s === '.') s = '0';
+    let n = Number(s);
+    if (!Number.isFinite(n)) n = 0;
+    n = Math.min(100, Math.max(0, n));
+    const fixed = n.toFixed(2);
+    let norm = fixed.replace(/0+$/g, '').replace(/\.$/, '');
+    if (norm === '') norm = '0';
+    setRefundPercent(Number(norm));
+    setRefundPercentStr(norm);
+  };
 
   useEffect(() => {
     const loadOrder = async () => {
@@ -240,24 +288,6 @@ export default function TxDetailsPage() {
         <button className="px-4 py-2 rounded-lg border" onClick={() => router.push('/history')}>Back to My EscrowPi</button>
       </div>
     );
-  }
-
-  const handleSend = async () => {
-    if (!currentUser?.pi_uid || !tx || tx?.amount<=0) {
-      toast.error('SCREEN.MEMBERSHIP.VALIDATION.USER_NOT_LOGGED_IN_PAYMENT_MESSAGE')
-      return 
-    }
-    // setIsSaveLoading(true)
-  
-    const paymentData: PaymentDataType = {
-      amount: parseFloat(tx?.amount.toString()),
-      memo: `Escrow payment between ${currentUser.pi_username} and ${tx?.counterparty}`,
-      metadata: { 
-        orderType: OrderTypeEnum.Send,
-        order_no: id
-      },        
-    };
-    await payWithPi(paymentData, onPaymentComplete, onPaymentError);
   }
 
   const arrow = tx.myRole === 'payer' ? 'You →' : 'You ←';
@@ -496,6 +526,8 @@ export default function TxDetailsPage() {
         disputeStatus={disputeStatus}
         refundPercent={refundPercent}
         refundPercentStr={refundPercentStr}
+        onRefundInputChange={handleRefundInputChange}
+        onRefundInputBlur={handleRefundInputBlur}
         lastProposedPercent={lastProposedPercent}
         lastProposedBy={lastProposedBy}
         lastProposedByUsername={lastProposedByUsername}

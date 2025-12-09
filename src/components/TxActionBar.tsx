@@ -8,6 +8,8 @@ interface TxActionBarProps {
   disputeStatus: 'none' | 'proposed' | 'accepted' | 'declined' | 'cancelled';
   refundPercent: number;
   refundPercentStr: string;
+  onRefundInputChange: (value: string) => void;
+  onRefundInputBlur: () => void;
   lastProposedPercent: number | null;
   lastProposedBy: 'payer' | 'payee' | null;
   lastProposedByUsername: string | null;
@@ -38,6 +40,8 @@ export default function TxActionBar({
   disputeStatus,
   refundPercent,
   refundPercentStr,
+  onRefundInputChange,
+  onRefundInputBlur,
   lastProposedPercent,
   lastProposedBy,
   lastProposedByUsername,
@@ -120,18 +124,19 @@ export default function TxActionBar({
               if (tx.status === "disputed") {
                 const isAccepted = disputeStatus === "accepted";
                 const hasProposal =
-                  disputeStatus === "proposed" && lastProposedPercent !== null;
-                const isProposer = hasProposal && lastProposedBy === tx.myRole;
-                const inputValid = refundPercent >= 0 && refundPercent <= 100;
-                const equalsCurrent =
-                  hasProposal &&
-                  lastProposedPercent !== null &&
-                  Math.abs(refundPercent - lastProposedPercent) < 1e-9;
+                  lastProposedPercent !== null && disputeStatus !== "none";
+                const hasCounterpartyProposal =
+                  hasProposal && lastProposedBy !== tx.myRole;
+                const matchesProposal =
+                  hasCounterpartyProposal &&
+                  Math.abs(refundPercent - (lastProposedPercent ?? 0)) < 1e-9;
+                const inputDisabled =
+                  isAccepted || (hasProposal && lastProposedBy === tx.myRole);
                 const sendDisabled =
-                  isAccepted || !inputValid || (hasProposal && (isProposer || equalsCurrent));
-                const acceptDisabled =
-                  isAccepted || !hasProposal || isProposer || !equalsCurrent;
-                const inputDisabled = isAccepted || (hasProposal && isProposer);
+                  isAccepted ||
+                  matchesProposal ||
+                  (hasProposal && lastProposedBy === tx.myRole);
+                const acceptDisabled = isAccepted || !matchesProposal;
 
                 return (
                   <div className="h-full flex flex-col">
@@ -208,18 +213,27 @@ export default function TxActionBar({
                         </button>
                       </div>
                       <div className="flex flex-col items-center justify-center text-[11px] text-gray-700">
-                        <div className="flex items-center gap-1">
-                          <span>Refund</span>
+                        <div className="text-[11px] text-gray-800 leading-tight">
+                          Propose refund
+                        </div>
+                        <div className="text-[10px] text-gray-600">(0-100%)</div>
+                        <div className="flex items-baseline justify-center mt-0.5">
                           <input
                             type="text"
-                            className={`w-14 h-7 text-center text-[13px] rounded border px-1 ${
-                              inputDisabled
-                                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                                : ""
+                            inputMode="decimal"
+                            className={`w-16 text-center bg-transparent border-0 outline-none text-[20px] font-bold ${
+                              inputDisabled ? "text-gray-400 cursor-not-allowed" : ""
                             }`}
                             value={refundPercentStr}
                             disabled={inputDisabled}
-                            onChange={() => {}}
+                            onChange={(e) => {
+                              if (inputDisabled) return;
+                              onRefundInputChange(e.target.value);
+                            }}
+                            onBlur={() => {
+                              if (inputDisabled) return;
+                              onRefundInputBlur();
+                            }}
                           />
                           <span
                             className={`ml-1 text-[16px] font-bold ${
