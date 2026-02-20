@@ -43,7 +43,6 @@ export default function TxCancelPaidModal({
     >
       <div className="space-y-3 text-sm">
         {(() => {
-          const networkNotRefunded = 0.01;
           const innerRefundTotal = b.base + b.completionStake + networkRefund;
           return (
             <div className="space-y-2 rounded-lg p-3">

@@ -13,7 +13,7 @@ import { getNotifications } from '@/services/notificationApi';
 
 function Splash() {
   return (
-    <div className="flex flex-col items-center justify-start h-screen pt-24">
+    <div className="fixed inset-0 z-[999] flex flex-col items-center justify-start pt-24 bg-white">
       <Image src="/escrow-pi-splash-logo.png" alt="EscrowPi" width={180} height={180} priority />
     </div>
   );
@@ -271,10 +271,7 @@ export default function HomePage() {
 
   if (!mounted || isSigningInUser) {
     // Render a minimal stable wrapper on SSR and first client paint
-    return (
-    <div className="fixed inset-0 z-[999] flex flex-col items-center justify-start pt-24 bg-white">
-      <Image src="/escrow-pi-splash-logo.png" alt="EscrowPi" width={180} height={180} priority />
-    </div>);
+    return <Splash />;
   }
 
   return (
@@ -348,9 +345,6 @@ export default function HomePage() {
                     // Remove extra leading zeros in integer part (keep one zero if all zeros)
                     intPart = intPart.replace(/^0+(?=\d)/, '');
                     if (intPart === '') intPart = '0';
-                  // Remove extra leading zeros in integer part (keep one zero if all zeros)
-                  intPart = intPart.replace(/^0+(?=\d)/, '');
-                  if (intPart === '') intPart = '0';
 
                   // Compute numeric value
                   const n = parseFloat(intPart + (fracPart !== '' ? `.${fracPart}` : ''));

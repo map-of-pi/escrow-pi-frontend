@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { IOrder } from "@/types";
 import { fetchUserOrders } from "@/services/orderApi";
 import { AppContext } from "@/context/AppContextProvider";
-import { mapOrdersToTxItems, TxItem, TxStatus, statusLabel, statusClasses } from "@/lib";
+import { mapOrdersToTxItems, TxItem, statusLabel, statusClasses } from "@/lib";
 
 export default function HistoryPage() {
   const { currentUser } = useContext(AppContext);
