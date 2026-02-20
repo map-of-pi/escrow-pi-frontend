@@ -3,7 +3,7 @@
 import React from "react";
 import Modal from "@/components/Modal";
 import ConfirmButton from "@/components/ConfirmButton";
-import { TxItem, TxStatus } from "@/lib";
+import { TxItem } from "@/lib";
 
 interface TxDisputeConfirmModalProps {
   tx: TxItem;

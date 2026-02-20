@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { TxItem, TxStatus, fmt, deriveBreakdown, statusLabel } from "@/lib";
+import { TxItem, TxStatus } from "@/lib";
 
 interface TxActionBarProps {
   tx: TxItem;
@@ -15,7 +15,6 @@ interface TxActionBarProps {
   lastProposedByUsername: string | null;
   acceptedByUsername: string | null;
   actionBanner: string;
-  setActionBanner: (msg: string) => void;
   showDispute: boolean;
   setShowDispute: (v: boolean) => void;
   showCancel: boolean;
@@ -47,7 +46,6 @@ export default function TxActionBar({
   lastProposedByUsername,
   acceptedByUsername,
   actionBanner,
-  setActionBanner,
   setShowDispute,
   setShowCancel,
   setShowFulfilled,

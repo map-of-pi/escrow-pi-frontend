@@ -19,11 +19,11 @@ import TxSendProposalModal from '@/components/tx-modals/TxSendProposalModal';
 import TxAcceptProposalModal from '@/components/tx-modals/TxAcceptProposalModal';
 import { AppContext } from '@/context/AppContextProvider';
 import { fetchSingleUserOrder, updateOrderStatus, proposeDispute, acceptDispute } from '@/services/orderApi';
-import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend, fmt, deriveBreakdown } from '@/lib';
+import { mapOrdersToTxItems, TxItem, TxStatus, statusClasses, statusLabel, mapCommentsToFrontend, mapCommentToFrontend } from '@/lib';
 import { addComment } from '@/services/commentApi';
 import { payWithPi } from '@/config/payment';
 import { toast } from 'react-toastify';
-import { IComment, IOrder, OrderTypeEnum, PaymentDataType } from '@/types';
+import { IComment, IOrder } from '@/types';
 
 export default function TxDetailsPage() {
   const router = useRouter();
@@ -295,8 +295,6 @@ export default function TxDetailsPage() {
   return (
     <div className="space-y-4 md:space-y-3 lg:space-y-2 pb-[180px]">
       <TxHeaderCard
-        tx={tx}
-        arrowLabel={arrow}
         isRefreshing={isRefreshing}
         onBack={() => router.push('/history')}
         onRefresh={() => {
@@ -362,7 +360,6 @@ export default function TxDetailsPage() {
         open={showSendProposal}
         onClose={() => setShowSendProposal(false)}
         refundPercent={refundPercent}
-        refundPercentStr={refundPercentStr}
         onConfirm={async () => {
           try {
             const percentVal = parseFloat(refundPercentStr);
@@ -533,7 +530,6 @@ export default function TxDetailsPage() {
         lastProposedByUsername={lastProposedByUsername}
         acceptedByUsername={acceptedByUsername}
         actionBanner={actionBanner}
-        setActionBanner={setActionBanner}
         showDispute={showDispute}
         setShowDispute={setShowDispute}
         showCancel={showCancel}

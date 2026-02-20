@@ -1,19 +1,14 @@
 "use client";
 
 import React from "react";
-import { TxItem, statusClasses, statusLabel } from "@/lib";
 
 interface TxHeaderCardProps {
-  tx: TxItem;
-  arrowLabel: string;
   isRefreshing: boolean;
   onBack: () => void;
   onRefresh: () => void;
 }
 
 export default function TxHeaderCard({
-  tx,
-  arrowLabel,
   isRefreshing,
   onBack,
   onRefresh,

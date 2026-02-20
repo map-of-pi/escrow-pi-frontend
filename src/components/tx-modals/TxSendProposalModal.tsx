@@ -10,7 +10,6 @@ interface TxSendProposalModalProps {
   open: boolean;
   onClose: () => void;
   refundPercent: number;
-  refundPercentStr: string;
   onConfirm: () => Promise<void>;
 }
 
@@ -19,7 +18,6 @@ export default function TxSendProposalModal({
   open,
   onClose,
   refundPercent,
-  refundPercentStr,
   onConfirm,
 }: TxSendProposalModalProps) {
   if (tx.status !== "disputed") return null;
