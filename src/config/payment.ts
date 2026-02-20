@@ -20,13 +20,13 @@ export const payWithPi = async (paymentData: PaymentDataType, onComplete:any, on
       onComplete(res.data);
     }).catch((error) => {
       console.error('Error completing payment: ', error);
-      error(error);
+      onFail(error);
     });
   }
 
   const onCancel = (paymentId: string) => {
     axiosClient.post('/payments/cancelled-payment', { paymentId }, config).then((res)=>{
-      onComplete(res.data);
+      onFail(res.data);
     }).catch((error) => {
       console.error('Error completing payment: ', error);
       onFail(error);
@@ -38,12 +38,13 @@ export const payWithPi = async (paymentData: PaymentDataType, onComplete:any, on
   const onError = (error: Error, paymentDTO?: PaymentDTO) => {
     if (paymentDTO) {
       return axiosClient.post('/payments/error', { paymentDTO, error }, config).then((res)=>{
-        onComplete(res.data);
+        onFail(res.data);
       }).catch((error) => {
         console.error('Error completing payment: ', error);
         onFail(error);
       });
     }
+    onFail(error);
   }
 
   const callbacks = {    

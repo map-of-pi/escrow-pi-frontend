@@ -13,7 +13,7 @@ import { getNotifications } from '@/services/notificationApi';
 
 function Splash() {
   return (
-    <div className="flex flex-col items-center justify-start h-screen pt-24">
+    <div className="fixed inset-0 z-[999] flex flex-col items-center justify-start pt-24 bg-white">
       <Image src="/escrow-pi-splash-logo.png" alt="EscrowPi" width={180} height={180} priority />
     </div>
   );
@@ -152,6 +152,14 @@ export default function HomePage() {
     setOrderNo('')
   }
 
+  const normalizePiName = (value: string) =>
+    value.trim().replace(/^@/, '');
+
+  const isSelfCounterparty = (value: string) => {
+    if (!currentUser?.pi_username) return false;
+    return normalizePiName(value) === normalizePiName(currentUser.pi_username);
+  };
+
   // Validate inputs and open the appropriate modal
   const handleOpen = async (orderType: OrderTypeEnum) => {
     const name = counterparty.trim();
@@ -160,6 +168,10 @@ export default function HomePage() {
 
     if (!name) {
       toast.error(orderType === OrderTypeEnum.Send ? 'Please enter Payee Pioneer Name' : 'Please enter Payer Pioneer Name');
+      return;
+    }
+    if (isSelfCounterparty(name)) {
+      toast.error('You cannot create an EscrowPi transaction with yourself');
       return;
     }
     if (!desc) {
@@ -193,6 +205,10 @@ export default function HomePage() {
       toast.error('SCREEN.MEMBERSHIP.VALIDATION.USER_NOT_LOGGED_IN_PAYMENT_MESSAGE')
       return 
     }
+    if (isSelfCounterparty(counterparty)) {
+      toast.error('You cannot create an EscrowPi transaction with yourself');
+      return;
+    }
     setIsSaveLoading(true)
 
     // Create order with status initiated; store total amount
@@ -223,6 +239,10 @@ export default function HomePage() {
 
   const handleRequest = async () => {
     if (!currentUser) return
+    if (isSelfCounterparty(counterparty)) {
+      toast.error('You cannot create an EscrowPi transaction with yourself');
+      return;
+    }
     setIsSaveLoading(true)
     // Create order with status initiated; store total amount
     const total = fees.total;
@@ -251,10 +271,7 @@ export default function HomePage() {
 
   if (!mounted || isSigningInUser) {
     // Render a minimal stable wrapper on SSR and first client paint
-    return (
-    <div className="fixed inset-0 z-[999] flex flex-col items-center justify-start pt-24 bg-white">
-      <Image src="/escrow-pi-splash-logo.png" alt="EscrowPi" width={180} height={180} priority />
-    </div>);
+    return <Splash />;
   }
 
   return (
@@ -328,9 +345,6 @@ export default function HomePage() {
                     // Remove extra leading zeros in integer part (keep one zero if all zeros)
                     intPart = intPart.replace(/^0+(?=\d)/, '');
                     if (intPart === '') intPart = '0';
-                  // Remove extra leading zeros in integer part (keep one zero if all zeros)
-                  intPart = intPart.replace(/^0+(?=\d)/, '');
-                  if (intPart === '') intPart = '0';
 
                   // Compute numeric value
                   const n = parseFloat(intPart + (fracPart !== '' ? `.${fracPart}` : ''));
