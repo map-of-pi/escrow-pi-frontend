@@ -588,14 +588,8 @@ export default function TxDetailsPage() {
             };
             await payWithPi(
               paymentData,
-              () => {
-                setActionBanner('Payment completed successfully');
-                setTimeout(() => setActionBanner(''), 2000);
-                router.push('/history');
-              },
-              () => {
-                toast.error('Payment error');
-              }
+              onPaymentComplete,
+              onPaymentError
             );
           } catch (e) {
             toast.error('Payment error');
