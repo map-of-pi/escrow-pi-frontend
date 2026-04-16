@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 
@@ -557,4 +557,10 @@ const ProviderPayPage = () => {
   );
 };
 
-export default ProviderPayPage;
+const ProviderPayPageWithSuspense = () => (
+  <Suspense fallback={<div className="p-6 text-center text-gray-600">Loading...</div>}>
+    <ProviderPayPage />
+  </Suspense>
+);
+
+export default ProviderPayPageWithSuspense;
