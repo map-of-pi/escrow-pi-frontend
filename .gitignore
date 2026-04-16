@@ -34,3 +34,6 @@ public/validation-key.txt
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# TypeScript
+*.tsbuildinfo

@@ -8,6 +8,7 @@ import {
   ReactNode,
   useEffect
 } from 'react';
+import { usePathname } from 'next/navigation';
 import axiosClient, { setAuthToken } from '@/config/client';
 import { onIncompletePaymentFound } from '@/config/payment';
 import { AuthResult } from '@/config/pi';
@@ -52,6 +53,7 @@ interface AppContextProviderProps {
 }
 
 const AppContextProvider = ({ children }: AppContextProviderProps) => {
+  const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState<IUser | null>(null);
   const [isSigningInUser, setIsSigningInUser] = useState(false);
   const [reload, setReload] = useState(false);
@@ -153,6 +155,12 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
 
   useEffect(() => {
     if (isSigningInUser || currentUser) return;
+
+    const isProviderCheckoutRoute =
+      pathname?.startsWith('/provider/pay') || pathname?.startsWith('/provider/callback');
+    if (isProviderCheckoutRoute) {
+      return;
+    }
     
     const nodeEnv = process.env.NODE_ENV as 'development' | 'staging';
 
@@ -168,7 +176,7 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
       .catch(err => console.error('>>> [loadPiSdk] Pi SDK load/init error:', err));
 
     autoLoginUser();
-  }, [isSigningInUser]);
+  }, [isSigningInUser, pathname, currentUser]);
 
   return (
     <AppContext.Provider 
