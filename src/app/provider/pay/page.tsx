@@ -86,6 +86,8 @@ const useProviderPayload = (): ProviderRedirectParams | null => {
     const amount = sanitizeParam(params.get("amount"));
     const receiverPiUsername = sanitizeParam(params.get("receiverPiUsername"));
     const memo = sanitizeParam(params.get("memo"));
+    const developerFeePercent = sanitizeParam(params.get("developerFeePercent"));
+    const developerPiUid = sanitizeParam(params.get("developerPiUid"));
     if (!invocationId || !developerAppId || !returnUrl || !signature) {
       return null;
     }
@@ -98,6 +100,8 @@ const useProviderPayload = (): ProviderRedirectParams | null => {
       amount,
       receiverPiUsername,
       memo,
+      developerFeePercent,
+      developerPiUid,
     };
   }, [params]);
 };
@@ -183,7 +187,22 @@ const ProviderPayPage = () => {
     if (!redirectPayload || !piToken || !context) return;
     setSubmitState("confirming");
     try {
-      const submitResponse = await submitProviderPayRequest(redirectPayload, piToken);
+      const amountToPay =
+        typeof context.fees?.totalAmount === "number"
+          ? context.fees.totalAmount
+          : typeof context.fees?.baseAmount === "number"
+          ? context.fees.baseAmount
+          : typeof context.issuedFor?.amount === "number"
+          ? context.issuedFor.amount
+          : undefined;
+
+      if (!amountToPay || amountToPay <= 0) {
+        throw new Error("Unable to determine Pi payment amount");
+      }
+
+      const submitResponse = await submitProviderPayRequest(redirectPayload, piToken, {
+        totalAmount: amountToPay,
+      });
 
       if (!submitResponse?.orderNo) {
         throw new Error("Order number missing from provider submit response");
@@ -202,19 +221,6 @@ const ProviderPayPage = () => {
       const backendToken = authResponse?.data?.token;
       if (typeof backendToken === "string" && backendToken.length) {
         setAuthToken(backendToken);
-      }
-
-      const amountToPay =
-        typeof context.fees?.totalAmount === "number"
-          ? context.fees.totalAmount
-          : typeof context.fees?.baseAmount === "number"
-          ? context.fees.baseAmount
-          : typeof context.issuedFor?.amount === "number"
-          ? context.issuedFor.amount
-          : undefined;
-
-      if (!amountToPay || amountToPay <= 0) {
-        throw new Error("Unable to determine Pi payment amount");
       }
 
       const paymentMemo =

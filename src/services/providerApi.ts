@@ -9,6 +9,8 @@ export type ProviderRedirectParams = {
   amount?: string | null;
   receiverPiUsername?: string | null;
   memo?: string | null;
+  developerFeePercent?: string | null;
+  developerPiUid?: string | null;
 };
 
 export type ProviderDeveloperApp = {
@@ -90,6 +92,12 @@ const buildQueryString = (payload: ProviderRedirectParams) => {
   if (payload.memo) {
     params.set("memo", payload.memo);
   }
+  if (payload.developerFeePercent) {
+    params.set("developerFeePercent", payload.developerFeePercent);
+  }
+  if (payload.developerPiUid) {
+    params.set("developerPiUid", payload.developerPiUid);
+  }
   return params.toString();
 };
 
@@ -108,14 +116,21 @@ export const fetchProviderPayContext = async (
 
 export const submitProviderPayRequest = async (
   payload: ProviderRedirectParams,
-  piAccessToken: string
+  piAccessToken: string,
+  options?: { totalAmount?: number }
 ): Promise<ProviderSubmitResponse> => {
+  const requestBody: Record<string, unknown> = {
+    ...payload,
+    piAccessToken,
+  };
+
+  if (typeof options?.totalAmount === "number") {
+    requestBody.totalAmount = options.totalAmount;
+  }
+
   const { data } = await axiosClient.post(
     "/developer/provider/pay/submit",
-    {
-      ...payload,
-      piAccessToken,
-    },
+    requestBody,
     {
       headers: {
         Authorization: `Bearer ${piAccessToken}`,
