@@ -22,6 +22,7 @@ export type TxItem = {
   date: string; // ISO
   auditLog?: string;
   needsPayerResponse?: boolean; // show popup when true and this is a receive where I am payer
+  developerAppName: string;
 };
 
 export const statusClasses: Record<TxStatus, string> = {
@@ -60,6 +61,10 @@ export const mapOrdersToTxItems = (orders: IOrder[], authUsername: string): TxIt
   return orders.map((order) => {
     const myRole = resolveRole(order.sender_username, authUsername);
     const direction = resolveDirection(myRole);
+    const developerAppName =
+      typeof order.developer_app_name === "string" && order.developer_app_name.trim().length
+        ? order.developer_app_name.trim()
+        : "EscrowPi";
 
     const counterparty =
       myRole === "payer" ? order.receiver_username : order.sender_username;
@@ -72,6 +77,7 @@ export const mapOrdersToTxItems = (orders: IOrder[], authUsername: string): TxIt
       amount: order.amount,
       status: order.status as TxStatus,
       date: new Date(order.createdAt).toISOString(),
+      developerAppName,
     };
   });
 };

@@ -93,6 +93,9 @@ export default function HistoryPage() {
                   <div className="text-sm font-semibold">
                     <span className="mr-2">{arrow}</span>
                     <span>{tx.counterparty}</span>
+                    <div className="mt-0.5 text-xs font-normal text-gray-500">
+                      Merchant: <span className="font-medium text-gray-700">{tx.developerAppName}</span>
+                    </div>
                   </div>
                   <div
                     className={`text-xs px-2 py-1 rounded border ${statusClasses[tx.status]}`}
