@@ -55,17 +55,19 @@ const formatPi = (value?: number | null) => {
   return `${rounded.toString()} π`;
 };
 
-const formatTimestamp = (value?: string | null) => {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+const formatCountdown = (milliseconds: number) => {
+  if (milliseconds <= 0) {
+    return "00:00";
+  }
+
+  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (totalSeconds % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${minutes}:${seconds}`;
 };
 
 const sanitizeParam = (value: string | null): string | null => {
@@ -127,6 +129,14 @@ const ProviderPayPage = () => {
   const [phase, setPhase] = useState<"initial" | "auth" | "loading" | "ready" | "error">("initial");
   const [error, setError] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<"idle" | "confirming" | "cancelling">("idle");
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const authenticateWithPi = useCallback(async (): Promise<string> => {
     setPhase("auth");
@@ -389,7 +399,16 @@ const ProviderPayPage = () => {
   const baseAmount = typeof issued.amount === "number"
     ? issued.amount
     : context?.fees?.baseAmount ?? fallbackAmount;
-  const expiresLabel = formatTimestamp(context?.expiresAt);
+  const expiresIn = useMemo(() => {
+    if (!context?.expiresAt) return null;
+    const diff = new Date(context.expiresAt).getTime() - now;
+    return formatCountdown(diff);
+  }, [context?.expiresAt, now]);
+
+  const isExpired = useMemo(() => {
+    if (!context?.expiresAt) return false;
+    return new Date(context.expiresAt).getTime() <= now;
+  }, [context?.expiresAt, now]);
 
   const steps = [
     { label: "Authenticate with Pi", done: Boolean(piToken) },
@@ -485,8 +504,10 @@ const ProviderPayPage = () => {
                 <p className="text-lg font-semibold">@{context.payer.piUsername}</p>
               </div>
               <div className="text-right">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Expires</p>
-                <p className="text-sm font-semibold text-gray-900">{expiresLabel ?? "Unknown"}</p>
+                <p className="text-xs uppercase tracking-wide text-gray-500">Expires in</p>
+                <p className={`text-sm font-semibold ${isExpired ? "text-red-600" : "text-gray-900"}`}>
+                  {context?.expiresAt ? (isExpired ? "Expired" : expiresIn ?? "—") : "Unknown"}
+                </p>
               </div>
             </div>
             <div className="mt-6 grid gap-4 rounded-2xl bg-gray-50 p-4 text-sm">
@@ -538,6 +559,11 @@ const ProviderPayPage = () => {
             <p className="text-sm text-gray-600">
               By confirming you authorize EscrowPi to debit your Pi wallet for the total above and lock it in escrow until the merchant marks the order complete or a dispute is resolved.
             </p>
+            {context?.expiresAt && (
+              <p className={`mt-4 text-center text-sm font-medium ${isExpired ? "text-red-600" : "text-gray-600"}`}>
+                {isExpired ? "Payment window expired. Fetch a new link." : `Payment window expires in ${expiresIn ?? "—"}`}
+              </p>
+            )}
             <div className="mt-5 grid gap-3">
               <button
                 type="button"

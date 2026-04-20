@@ -62,7 +62,14 @@ export default function Navbar() {
 
   // No reading/writing of data-loading here. Home page controls it; CSS responds.
 
-  const disabled = isHomePage;
+  const providerLocked = !!pathname && pathname.includes('/provider');
+  const disabled = isHomePage || providerLocked;
+
+  useEffect(() => {
+    if (providerLocked && sidebarOpen) {
+      setSidebarOpen(false);
+    }
+  }, [providerLocked, sidebarOpen]);
 
   // Check for uncleared notifications to show an indicator on the hamburger
   useEffect(() => {
@@ -94,11 +101,14 @@ export default function Navbar() {
   }, [currentUser?.pi_uid, sidebarOpen]);
 
   const isNonHome = (pathname ?? '/') !== '/';
+  const baseNavClass = styles.nav_item;
+  const lockedNavClass = `${styles.nav_item} ${styles.nav_item_locked}`;
   return (
     <div
       className="w-full z-[500] fixed top-0 left-0 right-0"
       style={{ background: 'var(--default-primary-color)' }}
       data-ready={(isNonHome || ready) ? 'true' : undefined}
+      data-provider-locked={providerLocked ? 'true' : undefined}
     >
       <div className="w-full h-[76.19px] px-[16px] py-[5px]">
         {/* Center title row */}
@@ -123,9 +133,13 @@ export default function Navbar() {
 
         {/* Nav row */}
         <div className="flex justify-between items-center">
-          <div className={`${styles.nav_item}`}>
-            {isHomePage ? (
-              <span aria-disabled className="w-full h-full flex items-center justify-center cursor-not-allowed">
+          <div className={isHomePage || providerLocked ? lockedNavClass : baseNavClass}>
+            {isHomePage || providerLocked ? (
+              <span
+                aria-disabled
+                className="w-full h-full flex items-center justify-center"
+                aria-hidden="true"
+              >
                 <IoMdArrowBack size={26} className={`text-[var(--default-tertiary-color)]`} />
               </span>
             ) : (
@@ -141,7 +155,6 @@ export default function Navbar() {
                     }
                     router.push(backHref);
                   } catch {
-                    // As a last resort, hard navigate
                     window.location.href = backHref;
                   }
                 }}
@@ -151,29 +164,49 @@ export default function Navbar() {
             )}
           </div>
 
-          <div className={`${styles.nav_item} ${disabled ? 'disabled' : ''}`}>
-            <Link
-              href="/?skipSplash=1"
-              aria-label="Go Home"
-              className="w-full h-full flex items-center justify-center"
-              onClick={(e) => {
-                e.preventDefault();
-                if (!disabled) {
-                  if (typeof window !== 'undefined') {
-                    window.sessionStorage.setItem('escrowpi:cameFromInternalNav', '1');
+          <div className={`${styles.nav_item} ${disabled ? 'disabled' : ''} ${providerLocked ? styles.nav_item_locked : ''}`}>
+            {providerLocked ? (
+              <span
+                aria-disabled
+                aria-hidden="true"
+                className="w-full h-full flex items-center justify-center"
+              >
+                <MdHome size={24} className="text-[var(--default-tertiary-color)]" />
+              </span>
+            ) : (
+              <Link
+                href="/?skipSplash=1"
+                aria-label="Go Home"
+                className="w-full h-full flex items-center justify-center"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (!disabled) {
+                    if (typeof window !== 'undefined') {
+                      window.sessionStorage.setItem('escrowpi:cameFromInternalNav', '1');
+                    }
+                    router.push('/?skipSplash=1');
                   }
-                  router.push('/?skipSplash=1');
-                }
-              }}
-            >
-              <MdHome size={24} className={`${disabled ? 'text-[var(--default-tertiary-color)]' : 'text-[var(--default-secondary-color)]'}`} />
-            </Link>
+                }}
+              >
+                <MdHome size={24} className={`${disabled ? 'text-[var(--default-tertiary-color)]' : 'text-[var(--default-secondary-color)]'}`} />
+              </Link>
+            )}
           </div>
 
-          <div className={`${styles.nav_item} disabled`}>
-            <Link href="/?skipSplash=1" aria-label="Home" onClick={(e) => { e.preventDefault(); if (!disabled) router.push('/?skipSplash=1'); }}>
-              <Image src="/escrow-pi-logo.png" alt="EscrowPi" width={34} height={34} />
-            </Link>
+          <div className={`${styles.nav_item} disabled ${providerLocked ? styles.nav_item_locked : ''}`}>
+            {providerLocked ? (
+              <span
+                aria-disabled
+                aria-hidden="true"
+                className="w-full h-full flex items-center justify-center"
+              >
+                <Image src="/escrow-pi-logo.png" alt="EscrowPi" width={34} height={34} />
+              </span>
+            ) : (
+              <Link href="/?skipSplash=1" aria-label="Home" onClick={(e) => { e.preventDefault(); if (!disabled) router.push('/?skipSplash=1'); }}>
+                <Image src="/escrow-pi-logo.png" alt="EscrowPi" width={34} height={34} />
+              </Link>
+            )}
           </div>
 
           <div className={`${styles.nav_item}`}>
@@ -182,22 +215,34 @@ export default function Navbar() {
             </a>
           </div>
 
-          <div className={`${styles.nav_item} hamburger-btn relative`}>
-            <button
-              onClick={() => { setSidebarOpen((s) => !s); }}
-              className={"outline-none"}
-            >
-              {sidebarOpen ? (
-                <IoMdClose size={24} className={"hamburger-icon"} />
-              ) : (
-                <div className="relative">
-                  <FiMenu size={24} className={"hamburger-icon"} />
-                  {hasUnread && (
-                    <span className={styles.badge_dot} aria-label="Unread notifications" />
-                  )}
-                </div>
-              )}
-            </button>
+          <div
+            className={`${styles.nav_item} hamburger-btn relative ${providerLocked ? styles.nav_item_locked : ''}`}
+          >
+            {providerLocked ? (
+              <span
+                aria-disabled
+                aria-hidden="true"
+                className="w-full h-full flex items-center justify-center"
+              >
+                <FiMenu size={24} className="hamburger-icon text-[var(--default-tertiary-color)]" />
+              </span>
+            ) : (
+              <button
+                onClick={() => { setSidebarOpen((s) => !s); }}
+                className={"outline-none"}
+              >
+                {sidebarOpen ? (
+                  <IoMdClose size={24} className={"hamburger-icon"} />
+                ) : (
+                  <div className="relative">
+                    <FiMenu size={24} className={"hamburger-icon"} />
+                    {hasUnread && (
+                      <span className={styles.badge_dot} aria-label="Unread notifications" />
+                    )}
+                  </div>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>
