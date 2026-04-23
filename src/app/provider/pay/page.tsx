@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 
@@ -123,6 +123,7 @@ type PiFlowResult = {
 };
 
 const ProviderPayPage = () => {
+  const searchParams = useSearchParams();
   const redirectPayload = useProviderPayload();
   const [piToken, setPiToken] = useState<string | null>(null);
   const [context, setContext] = useState<ProviderContextResponse | null>(null);
@@ -130,6 +131,46 @@ const ProviderPayPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<"idle" | "confirming" | "cancelling">("idle");
   const [now, setNow] = useState(Date.now());
+  const [activeOrderNo, setActiveOrderNo] = useState<string | null>(null);
+  const piInitializedRef = useRef(false);
+
+  const sandboxParam = searchParams?.get("sandbox") ?? null;
+  const piInitConfig = useMemo(() => {
+    if (sandboxParam === null) {
+      return {
+        version: "2.0",
+        sandbox: process.env.NODE_ENV !== "production",
+      };
+    }
+    const normalized = sandboxParam.trim().toLowerCase();
+    const truthy = ["", "1", "true", "yes", "on"].includes(normalized);
+    return {
+      version: "2.0",
+      sandbox: truthy,
+    };
+  }, [sandboxParam]);
+
+  useEffect(() => {
+    piInitializedRef.current = false;
+  }, [piInitConfig.sandbox]);
+
+  const ensurePiSdk = useCallback(async () => {
+    try {
+      const Pi = await loadPiSdk();
+      if (!Pi) {
+        throw new Error("Pi Browser SDK not detected. Open this checkout inside Pi Browser.");
+      }
+
+      if (!piInitializedRef.current) {
+        await Promise.resolve(Pi.init(piInitConfig) as unknown);
+        piInitializedRef.current = true;
+      }
+
+      return Pi;
+    } catch (err) {
+      throw err instanceof Error ? err : new Error("Unable to load Pi SDK");
+    }
+  }, [piInitConfig]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -140,14 +181,7 @@ const ProviderPayPage = () => {
 
   const authenticateWithPi = useCallback(async (): Promise<string> => {
     setPhase("auth");
-    const Pi = await loadPiSdk();
-    if (typeof Pi?.init === "function") {
-      try {
-        Pi.init({ version: "2.0", sandbox: process.env.NODE_ENV !== "production" });
-      } catch (err) {
-        // Pi SDK throws if already initialized; ignore.
-      }
-    }
+    const Pi = await ensurePiSdk();
     const pioneerAuth = await Pi.authenticate(
       ["username", "payments", "wallet_address"],
       onIncompletePaymentFound
@@ -157,7 +191,7 @@ const ProviderPayPage = () => {
     }
     setPiToken(pioneerAuth.accessToken);
     return pioneerAuth.accessToken;
-  }, []);
+  }, [ensurePiSdk]);
 
   useEffect(() => {
     if (!redirectPayload) {
@@ -218,6 +252,9 @@ const ProviderPayPage = () => {
         throw new Error("Order number missing from provider submit response");
       }
 
+      const currentOrderNo = submitResponse.orderNo;
+      setActiveOrderNo(currentOrderNo);
+
       const authResponse = await axiosClient.post(
         "/users/authenticate",
         {},
@@ -254,7 +291,7 @@ const ProviderPayPage = () => {
         console.warn("Failed to process incomplete server payments, continuing with payment creation", err);
       }
 
-      const Pi = await loadPiSdk();
+      const Pi = await ensurePiSdk();
       const paymentResult = await new Promise<PiFlowResult>((resolve) => {
         let settled = false;
         const settle = (result: PiFlowResult) => {
@@ -341,6 +378,7 @@ const ProviderPayPage = () => {
         const cancelResponse = await cancelProviderPayRequest(
           {
             ...redirectPayload,
+            orderNo: currentOrderNo,
             message: paymentResult.message,
           },
           piToken
@@ -352,6 +390,7 @@ const ProviderPayPage = () => {
       const failResponse = await failProviderPayRequest(
         {
           ...redirectPayload,
+          orderNo: currentOrderNo,
           message: paymentResult.message,
           errorCode: paymentResult.errorCode,
         },
@@ -368,7 +407,13 @@ const ProviderPayPage = () => {
     if (!redirectPayload || !piToken) return;
     setSubmitState("cancelling");
     try {
-      const response = await cancelProviderPayRequest(redirectPayload, piToken);
+      const response = await cancelProviderPayRequest(
+        {
+          ...redirectPayload,
+          orderNo: activeOrderNo ?? undefined,
+        },
+        piToken
+      );
       window.location.assign(response.redirectUrl);
     } catch (err: any) {
       toast.error(describeError(err));

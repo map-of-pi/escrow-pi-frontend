@@ -141,7 +141,7 @@ export const submitProviderPayRequest = async (
 };
 
 export const failProviderPayRequest = async (
-  payload: ProviderRedirectParams & { message?: string; errorCode?: string },
+  payload: ProviderRedirectParams & { message?: string; errorCode?: string; orderNo?: string },
   piAccessToken: string
 ): Promise<ProviderSubmitResponse> => {
   const { data } = await axiosClient.post(
@@ -160,7 +160,7 @@ export const failProviderPayRequest = async (
 };
 
 export const cancelProviderPayRequest = async (
-  payload: ProviderRedirectParams & { message?: string },
+  payload: ProviderRedirectParams & { message?: string; orderNo?: string },
   piAccessToken: string
 ): Promise<ProviderSubmitResponse> => {
   const { data } = await axiosClient.post(
