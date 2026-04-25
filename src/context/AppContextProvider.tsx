@@ -6,7 +6,8 @@ import {
   useState,
   SetStateAction,
   ReactNode,
-  useEffect
+  useEffect,
+  useCallback,
 } from 'react';
 import { usePathname } from 'next/navigation';
 import axiosClient, { setAuthToken } from '@/config/client';
@@ -28,6 +29,8 @@ interface IAppContextProps {
   isSaveLoading: boolean;
   setIsSaveLoading: React.Dispatch<SetStateAction<boolean>>;
   adsSupported: boolean;
+  piAccessToken: string | null;
+  setPiAccessToken: (token: string | null) => void;
 }
 
 const initialState: IAppContextProps = {
@@ -43,7 +46,9 @@ const initialState: IAppContextProps = {
   setReload: () => {},
   isSaveLoading: false,
   setIsSaveLoading: () => {},
-  adsSupported: false
+  adsSupported: false,
+  piAccessToken: null,
+  setPiAccessToken: () => {},
 };
 
 export const AppContext = createContext<IAppContextProps>(initialState);
@@ -60,6 +65,24 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
   const [isSaveLoading, setIsSaveLoading] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [adsSupported, setAdsSupported] = useState(false);
+  const [piAccessTokenState, setPiAccessTokenState] = useState<string | null>(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return sessionStorage.getItem('escrowPiAccessToken');
+  });
+
+  const setPiAccessToken = useCallback((token: string | null) => {
+    setPiAccessTokenState(token);
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (token) {
+      sessionStorage.setItem('escrowPiAccessToken', token);
+    } else {
+      sessionStorage.removeItem('escrowPiAccessToken');
+    }
+  }, []);
 
   const showAlert = (message: string) => {
     setAlertMessage(message);
@@ -97,6 +120,7 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
         if (res.status === 200) {
           setAuthToken(res.data?.token);
           setCurrentUser(res.data.user);
+          setPiAccessToken(pioneerAuth.accessToken);
           // logger.info('User authenticated successfully.');
         } else {
           setCurrentUser(null);
@@ -193,7 +217,9 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
         setAlertMessage, 
         isSaveLoading, 
         setIsSaveLoading, 
-        adsSupported
+        adsSupported,
+        piAccessToken: piAccessTokenState,
+        setPiAccessToken
       }}
     >
       {children}

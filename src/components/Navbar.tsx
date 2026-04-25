@@ -285,7 +285,30 @@ export default function Navbar() {
                 </button>
               </div>
 
-              {/* Additional menu items can be added here, matching Map-of-Pi's pattern over time */}
+              <div className="space-y-3">
+                <button
+                  onClick={() => { router.push('/developer'); setSidebarOpen(false); }}
+                  className="w-full px-4 py-3 rounded-md text-base flex items-center justify-center border"
+                  style={{
+                    borderColor: 'var(--default-primary-color)',
+                    color: 'var(--default-primary-color)',
+                  }}
+                >
+                  Developer Portal
+                </button>
+                {currentUser?.isAdmin && (
+                  <button
+                    onClick={() => { router.push('/admin'); setSidebarOpen(false); }}
+                    className="w-full px-4 py-3 rounded-md text-base flex items-center justify-center border"
+                    style={{
+                      borderColor: 'var(--default-primary-color)',
+                      color: 'var(--default-primary-color)',
+                    }}
+                  >
+                    Admin Console
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Bottom content */}
