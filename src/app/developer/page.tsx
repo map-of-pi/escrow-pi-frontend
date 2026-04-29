@@ -8,13 +8,24 @@ import { MdAppRegistration } from 'react-icons/md';
 
 import { onIncompletePaymentFound } from '@/config/payment';
 import { AppContext } from '@/context/AppContextProvider';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import {
   DeveloperRequestRecord,
+  DeveloperRequestStatus,
   DeveloperRequestType,
   fetchDeveloperRequests,
+  revealDeveloperCredential,
   submitDeveloperRequest,
 } from '@/services/developerRequests';
 import { DeveloperAppRecord, fetchDeveloperApps } from '@/services/developerApps';
+import {
+  formatDateTime,
+  formatRequestFieldLabel,
+  formatRequestFieldValue,
+  recordTimestamp,
+  statusStyles,
+  summarizeRequest,
+} from './requestUtils';
 
 const DOC_ENV = process.env.NEXT_PUBLIC_DOC_ENV ?? 'dev';
 const DOC_BASE = `https://escrowpi-doc-${DOC_ENV}.vercel.app`;
@@ -28,6 +39,11 @@ const SECONDARY_COLOR = 'var(--default-secondary-color)';
 type AppRequestMode = 'create_app' | 'update_app';
 type PiAuthState = 'idle' | 'authenticating' | 'ready' | 'error';
 
+type CredentialRevealState = {
+  apiKey?: string;
+  revealedAt: string;
+};
+
 type PiWindow = Window & {
   Pi?: any;
 };
@@ -39,12 +55,6 @@ type AppInsight = {
 
 const PI_SDK_SCRIPT_ID = 'escrowpi-dev-portal-pi-sdk';
 const THIRTY_DAYS_MS = 1000 * 60 * 60 * 24 * 30;
-
-const statusStyles: Record<string, { label: string; className: string }> = {
-  requested: { label: 'Requested', className: 'bg-amber-100 text-amber-800' },
-  in_progress: { label: 'In progress', className: 'bg-blue-100 text-blue-800' },
-  closed: { label: 'Closed', className: 'bg-emerald-100 text-emerald-800' },
-};
 
 const describeError = (err: any) => {
   const message = err?.response?.data?.message ?? err?.message;
@@ -59,6 +69,9 @@ const parseListInput = (value: string) =>
     .split(/\n|,/)
     .map((entry) => entry.trim())
     .filter(Boolean);
+
+const EMAIL_REGEX_PATTERN = "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$";
+const EMAIL_REGEX = new RegExp(EMAIL_REGEX_PATTERN);
 
 const loadPiSdk = (): Promise<any> => {
   if (typeof window === 'undefined') {
@@ -88,45 +101,6 @@ const loadPiSdk = (): Promise<any> => {
   });
 };
 
-const summarizeRequest = (request: DeveloperRequestRecord) => {
-  const formData = request.formData || {};
-  if (request.requestType === 'create_app') {
-    return formData.appName ? `New app: ${formData.appName}` : 'New app onboarding';
-  }
-  if (request.requestType === 'update_app') {
-    if (formData.appName) return `Update ${formData.appName}`;
-    if (Array.isArray(formData.allowedOrigins) && formData.allowedOrigins.length) {
-      return `Update allowed origins (${formData.allowedOrigins.length})`;
-    }
-    return 'Update developer app metadata';
-  }
-  if (request.requestType === 'rotate_api_key') {
-    return formData.reason ? `Rotate key (${formData.reason})` : 'Rotate API key';
-  }
-  return 'Developer request';
-};
-
-const formatDateTime = (value: string | null) => {
-  if (!value) return '—';
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return value;
-  }
-};
-
-const recordTimestamp = (record: DeveloperRequestRecord) => {
-  const candidates = [record.updatedAt, record.createdAt] as Array<string | null>;
-  for (const value of candidates) {
-    if (!value) continue;
-    const ts = new Date(value).getTime();
-    if (!Number.isNaN(ts)) {
-      return ts;
-    }
-  }
-  return 0;
-};
-
 const timestampFromDate = (value: string | null | undefined) => {
   if (!value) return 0;
   const ts = new Date(value).getTime();
@@ -151,6 +125,11 @@ export default function DeveloperPortal() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [developerApps, setDeveloperApps] = useState<DeveloperAppRecord[]>([]);
   const [expandedAppIds, setExpandedAppIds] = useState<Set<string>>(new Set());
+  const [expandedRequestIds, setExpandedRequestIds] = useState<Set<string>>(new Set());
+  const [credentialReveals, setCredentialReveals] = useState<Record<string, CredentialRevealState>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [hideConfirmRequestId, setHideConfirmRequestId] = useState<string | null>(null);
+  const [revealLoading, setRevealLoading] = useState<Record<string, boolean>>({});
   const [appsLoading, setAppsLoading] = useState(false);
   const [appsError, setAppsError] = useState<string | null>(null);
   const [createMode, setCreateMode] = useState<AppRequestMode>('create_app');
@@ -160,7 +139,6 @@ export default function DeveloperPortal() {
     description: '',
     contactEmail: '',
     allowedOrigins: '',
-    callbackUrls: '',
     notes: '',
   });
   const [rotateForm, setRotateForm] = useState({
@@ -199,6 +177,38 @@ export default function DeveloperPortal() {
     }
   }, []);
 
+  const finalizeHideCredential = useCallback((requestId: string) => {
+    if (!requestId) {
+      return;
+    }
+    setCredentialReveals((prev) => {
+      const next = { ...prev };
+      if (next[requestId]) {
+        next[requestId] = { revealedAt: next[requestId].revealedAt };
+      }
+      return next;
+    });
+  }, []);
+
+  const requestHideCredential = useCallback((requestId: string) => {
+    if (!requestId) {
+      return;
+    }
+    setHideConfirmRequestId(requestId);
+  }, []);
+
+  const handleConfirmHideCredential = useCallback(() => {
+    if (!hideConfirmRequestId) {
+      return;
+    }
+    finalizeHideCredential(hideConfirmRequestId);
+    setHideConfirmRequestId(null);
+  }, [hideConfirmRequestId, finalizeHideCredential]);
+
+  const handleCancelHideCredential = useCallback(() => {
+    setHideConfirmRequestId(null);
+  }, []);
+
   const ensurePiToken = useCallback(async () => {
     if (piToken) {
       return piToken;
@@ -211,23 +221,76 @@ export default function DeveloperPortal() {
     return authenticateWithPi();
   }, [piToken, contextPiToken, authenticateWithPi]);
 
-  const loadRequestHistory = useCallback(async () => {
-    if (!piToken) {
-      return;
-    }
-    setHistoryLoading(true);
-    setHistoryError(null);
+  const loadRequestHistory = useCallback(
+    async (tokenOverride?: string | null) => {
+      const token = tokenOverride ?? piToken;
+      if (!token) {
+        return;
+      }
+      setHistoryLoading(true);
+      setHistoryError(null);
+      try {
+        const records = await fetchDeveloperRequests({}, token);
+        setRequestHistory(records);
+      } catch (err) {
+        const message = describeError(err);
+        setHistoryError(message);
+        toast.error(message);
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    [piToken]
+  );
+
+  const handleRevealCredential = useCallback(
+    async (request: DeveloperRequestRecord) => {
+      if (!request.id) {
+        toast.error('Unable to reveal credentials for this request.');
+        return;
+      }
+
+      const safeRequestId = request.id;
+
+      try {
+        setRevealLoading((prev) => ({ ...prev, [safeRequestId]: true }));
+        const token = await ensurePiToken();
+        const credential = await revealDeveloperCredential(safeRequestId, token);
+        setCredentialReveals((prev) => ({ ...prev, [safeRequestId]: { apiKey: credential.apiKey, revealedAt: credential.revealedAt } }));
+        setRequestHistory((prev) =>
+          prev.map((record) =>
+            record.id === safeRequestId
+              ? {
+                  ...record,
+                  credentialSnapshot: {
+                    appId: credential.appId,
+                    revealedAt: credential.revealedAt,
+                  },
+                }
+              : record
+          )
+        );
+      } catch (err) {
+        const message = describeError(err);
+        toast.error(message);
+      } finally {
+        setRevealLoading((prev) => ({ ...prev, [safeRequestId]: false }));
+      }
+    },
+    [ensurePiToken]
+  );
+
+  const handleCopyCredential = useCallback(async (requestId: string, apiKey: string) => {
     try {
-      const records = await fetchDeveloperRequests({}, piToken);
-      setRequestHistory(records);
+      await navigator.clipboard.writeText(apiKey);
+      toast.success('API key copied to clipboard.');
     } catch (err) {
-      const message = describeError(err);
-      setHistoryError(message);
-      toast.error(message);
-    } finally {
-      setHistoryLoading(false);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to copy API key', err);
+      }
+      toast.error('Unable to copy automatically. Please copy manually.');
     }
-  }, [piToken]);
+  }, []);
 
   const loadDeveloperApps = useCallback(async () => {
     if (!piToken) {
@@ -263,10 +326,15 @@ export default function DeveloperPortal() {
 
   useEffect(() => {
     if (piToken) {
-      loadRequestHistory();
       loadDeveloperApps();
     }
-  }, [piToken, loadRequestHistory, loadDeveloperApps]);
+  }, [piToken, loadDeveloperApps]);
+
+  useEffect(() => {
+    if (piToken) {
+      loadRequestHistory(piToken);
+    }
+  }, [piToken, loadRequestHistory]);
 
   useEffect(() => {
     setExpandedAppIds((prev) => {
@@ -297,9 +365,39 @@ export default function DeveloperPortal() {
       })
       .sort((a, b) => b.lastActivityTs - a.lastActivityTs);
   }, [developerApps]);
-  const appListOverflows = appInsights.length > 3;
+  const appPreview = useMemo<DeveloperAppRecord[]>(() => appInsights.slice(0, 3).map((entry) => entry.app), [appInsights]);
+  const requestPreviewList = useMemo<DeveloperRequestRecord[]>(() => orderedHistory.slice(0, 3), [orderedHistory]);
+  const hiddenAppCount = Math.max(appInsights.length - appPreview.length, 0);
+  const developerAppOptions = useMemo(
+    () =>
+      developerApps.map((app) => ({
+        appId: app.appId,
+        label: app.name ? `${app.name} (${app.appId})` : app.appId,
+      })),
+    [developerApps]
+  );
 
-  const requestPreview = useMemo<DeveloperRequestRecord[]>(() => orderedHistory.slice(0, 6), [orderedHistory]);
+  const appSummaryText = useMemo(() => {
+    if (appInsights.length === 0) {
+      return 'No developer apps yet.';
+    }
+    if (hiddenAppCount === 0) {
+      return `Showing all ${appInsights.length} apps.`;
+    }
+    return `Showing ${appPreview.length} of ${appInsights.length} apps.`;
+  }, [appInsights.length, hiddenAppCount, appPreview.length]);
+
+  const totalRequestCount = orderedHistory.length;
+  const hasRequestData = totalRequestCount > 0;
+  const requestSummaryText = useMemo(() => {
+    if (totalRequestCount === 0) {
+      return 'No developer requests yet.';
+    }
+    if (totalRequestCount <= 3) {
+      return `Showing all ${totalRequestCount} requests.`;
+    }
+    return `Showing the latest 3 of ${totalRequestCount} total requests.`;
+  }, [totalRequestCount]);
   const isFormDisabled = !currentUser;
 
   const handleRefreshStats = useCallback(() => {
@@ -307,7 +405,7 @@ export default function DeveloperPortal() {
       authenticateWithPi().catch(() => {});
       return;
     }
-    loadRequestHistory();
+    loadRequestHistory(piToken);
     loadDeveloperApps();
   }, [piToken, authenticateWithPi, loadRequestHistory, loadDeveloperApps]);
 
@@ -323,10 +421,52 @@ export default function DeveloperPortal() {
     });
   }, []);
 
+  const toggleRequestExpansion = useCallback((requestId: string | null) => {
+    if (!requestId) {
+      return;
+    }
+    setExpandedRequestIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(requestId)) {
+        next.delete(requestId);
+      } else {
+        next.add(requestId);
+      }
+      return next;
+    });
+  }, []);
+
   const handleSubmitAppRequest = async (event: FormEvent) => {
     event.preventDefault();
     if (isFormDisabled) {
       toast.error('Sign in with EscrowPi (top right) before submitting a request.');
+      return;
+    }
+
+    const isCreateFlow = createMode === 'create_app';
+    const trimmedAppName = createForm.appName.trim();
+    const trimmedDescription = createForm.description.trim();
+    const trimmedContactEmail = createForm.contactEmail.trim();
+    const trimmedNotes = createForm.notes.trim();
+    const trimmedDeveloperAppId = createForm.developerAppId.trim();
+
+    if (isCreateFlow && !trimmedAppName) {
+      toast.error('App name is required to create a new developer app.');
+      return;
+    }
+
+    if (isCreateFlow && !trimmedContactEmail) {
+      toast.error('Contact email is required to create a new developer app.');
+      return;
+    }
+
+    if (trimmedContactEmail && !EMAIL_REGEX.test(trimmedContactEmail)) {
+      toast.error('Enter a valid contact email (example: founder@merchant.com).');
+      return;
+    }
+
+    if (!isCreateFlow && !trimmedDeveloperAppId) {
+      toast.error('Select the developer app you want to update.');
       return;
     }
     try {
@@ -335,15 +475,15 @@ export default function DeveloperPortal() {
       const payload: { requestType: DeveloperRequestType; developerAppId?: string; formData: Record<string, any> } = {
         requestType: createMode,
         formData: {
-          appName: createForm.appName.trim() || undefined,
-          description: createForm.description.trim() || undefined,
-          contactEmail: createForm.contactEmail.trim() || undefined,
-          notes: createForm.notes.trim() || undefined,
+          appName: trimmedAppName || undefined,
+          description: trimmedDescription || undefined,
+          contactEmail: trimmedContactEmail || undefined,
+          notes: trimmedNotes || undefined,
         },
       };
 
       if (createMode === 'update_app') {
-        payload.developerAppId = createForm.developerAppId.trim();
+        payload.developerAppId = trimmedDeveloperAppId;
       }
 
       const allowedOrigins = parseListInput(createForm.allowedOrigins);
@@ -351,23 +491,17 @@ export default function DeveloperPortal() {
         payload.formData.allowedOrigins = allowedOrigins;
       }
 
-      const callbackUrls = parseListInput(createForm.callbackUrls);
-      if (callbackUrls.length) {
-        payload.formData.callbackUrls = callbackUrls;
-      }
-
       await submitDeveloperRequest(payload, token);
-      toast.success('Request submitted. We will follow up via your Pi account email.');
+      toast.success('Request submitted. Our team will review this request shortly.');
       setCreateForm({
         developerAppId: '',
         appName: '',
         description: '',
         contactEmail: '',
         allowedOrigins: '',
-        callbackUrls: '',
         notes: '',
       });
-      loadRequestHistory();
+      loadRequestHistory(token);
       loadDeveloperApps();
     } catch (err) {
       // errors already surfaced via toast inside ensurePiToken/submit
@@ -407,11 +541,13 @@ export default function DeveloperPortal() {
         },
         token
       );
-      toast.success('Rotation request submitted. Our team will reach out shortly.');
+      toast.success('Rotation request submitted. Our team will review this request shortly.');
       setRotateForm({ developerAppId: '', reason: '', urgency: '' });
-      loadRequestHistory();
+      loadRequestHistory(token);
       loadDeveloperApps();
     } catch (err) {
+      const message = describeError(err);
+      toast.error(message);
       if (process.env.NODE_ENV === 'development') {
         console.error('Failed to submit rotation request', err);
       }
@@ -460,8 +596,8 @@ export default function DeveloperPortal() {
         {!appsError && !appsLoading && appInsights.length === 0 && (
           <p className="mt-4 text-sm text-gray-600">Submit a request to link your first app to this Pi identity.</p>
         )}
-        <div className={`mt-4 space-y-3 ${appListOverflows ? 'max-h-80 overflow-y-auto pr-1' : ''}`}>
-          {appInsights.map(({ app }) => {
+        <div className="mt-4 space-y-3">
+          {appPreview.map((app) => {
             const normalizedStatus = (app.status ?? 'active').toLowerCase();
             const statusLabel = normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
             const statusClass =
@@ -518,15 +654,23 @@ export default function DeveloperPortal() {
             );
           })}
         </div>
+        <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+          <span>{appSummaryText}</span>
+          <Link
+            href="/developer/apps"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--default-primary-color)]"
+          >
+            View all apps
+            <FiChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
       </article>
 
       <article className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-3">
           <div>
-            <p className="text-xs uppercase tracking-widest text-gray-500">Request log</p>
-            {orderedHistory.length > requestPreview.length && (
-              <p className="text-xs text-gray-500">Showing {requestPreview.length} of {orderedHistory.length}</p>
-            )}
+            <p className="text-xs uppercase tracking-widest text-gray-500">Developer App requests</p>
+            <h2 className="text-xl font-semibold text-gray-900">Recent EscrowPi requests</h2>
           </div>
           <button
             type="button"
@@ -538,38 +682,136 @@ export default function DeveloperPortal() {
             {historyLoading ? <FiLoader className="h-5 w-5 animate-spin" /> : <FiRefreshCw className="h-5 w-5" />}
           </button>
         </div>
+        <p className="mt-2 text-sm text-gray-600">Monitor the latest submissions tied to your Pi identity.</p>
         <div className="mt-3 space-y-3">
           {piAuthState === 'error' && <p className="text-sm text-red-600">{piAuthError ?? 'Unable to sync Pi session. Reload to try again.'}</p>}
-          {piAuthState !== 'error' && (!piToken || historyLoading) && (
-            <p className="text-sm text-gray-500">{!piToken ? 'Syncing your Pi session…' : 'Refreshing activity…'}</p>
+          {piAuthState !== 'error' && !piToken && <p className="text-sm text-gray-500">Syncing your Pi session…</p>}
+          {piAuthState !== 'error' && piToken && historyLoading && (
+            <p className="text-sm text-gray-500">Refreshing activity…</p>
           )}
           {piAuthState !== 'error' && piToken && !historyLoading && historyError && (
             <p className="text-sm text-red-600">{historyError}</p>
           )}
-          {piAuthState !== 'error' && piToken && !historyLoading && !historyError && orderedHistory.length === 0 && (
+          {piAuthState !== 'error' && piToken && !historyLoading && !historyError && !hasRequestData && (
             <p className="text-sm text-gray-600">No requests yet. Submit a form below to get started.</p>
           )}
-          {piAuthState !== 'error' && piToken && !historyLoading && !historyError && orderedHistory.length > 0 &&
-            requestPreview.map((request) => {
+          {piAuthState !== 'error' && piToken && !historyError && hasRequestData &&
+            requestPreviewList.map((request: DeveloperRequestRecord, index: number) => {
               const status = statusStyles[request.status] ?? statusStyles.requested;
+              const fallbackId = `${request.requestType}-${request.developerAppId ?? 'unknown'}-${request.createdAt ?? index}`;
+              const requestId = request.id ?? fallbackId;
+              const isExpanded = requestId ? expandedRequestIds.has(requestId) : false;
+              const formEntries = Object.entries(request.formData ?? {});
+              const credentialMeta = request.credentialSnapshot ?? null;
+              const revealState = requestId ? credentialReveals[requestId] : undefined;
+              const isRevealLoading = requestId ? Boolean(revealLoading[requestId]) : false;
+              const canRevealCredential = request.status === 'approved' && Boolean(credentialMeta?.appId);
+              const revealedOn = revealState?.revealedAt ?? credentialMeta?.revealedAt ?? null;
+              const apiKeyValue = revealState?.apiKey ?? null;
+              const alreadyRevealed = Boolean(credentialMeta?.revealedAt) && !apiKeyValue;
               return (
-                <div key={request.id ?? request.createdAt} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
+                <div key={requestId} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => toggleRequestExpansion(requestId)}
+                    className="flex w-full items-center gap-3 text-left"
+                    disabled={!requestId}
+                  >
+                    <div className="flex-1">
                       <p className="text-sm font-semibold text-gray-900">{summarizeRequest(request)}</p>
                       <p className="text-xs text-gray-500">{formatDateTime(request.createdAt)}</p>
                     </div>
-                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${status.className}`}>{status.label}</span>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-4 text-xs text-gray-500">
-                    <span className="inline-flex items-center gap-1">
-                      <FiChevronRight className="h-3 w-3" /> {request.requestType.replace('_', ' ')}
-                    </span>
-                    <span>App ID: {request.developerAppId ?? '—'}</span>
-                  </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${status.className}`}>{status.label}</span>
+                      <span className="text-gray-400">{isExpanded ? <FiChevronDown /> : <FiChevronRight />}</span>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="mt-3 space-y-3 text-sm text-gray-700">
+                      <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+                        <span>Request type: {request.requestType.replace('_', ' ')}</span>
+                        <span>App ID: {request.developerAppId ?? '—'}</span>
+                      </div>
+                      {formEntries.length > 0 && (
+                        <div className="space-y-2 rounded-xl bg-gray-50 p-3">
+                          {formEntries.map(([key, value]) => (
+                            <div key={key}>
+                              <p className="text-xs uppercase tracking-widest text-gray-500">{formatRequestFieldLabel(key)}</p>
+                              <p className="whitespace-pre-wrap break-words text-sm font-medium text-gray-900">{formatRequestFieldValue(value)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {canRevealCredential && (
+                        <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-emerald-700">
+                            <span className="uppercase tracking-[0.3em]">Credentials</span>
+                            <span className="text-[0.95em] tracking-normal text-emerald-900">
+                              App ID: {credentialMeta?.appId ?? request.developerAppId ?? '—'}
+                            </span>
+                          </div>
+                          {apiKeyValue ? (
+                            <div className="flex flex-wrap items-center gap-3">
+                              <code className="block max-w-full overflow-x-auto rounded-lg bg-white px-3 py-2 font-mono text-sm text-emerald-900 shadow-inner break-all">
+                                {apiKeyValue}
+                              </code>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => requestId && handleCopyCredential(requestId, apiKeyValue)}
+                                  className="rounded-full border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
+                                >
+                                  Copy key
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => requestHideCredential(requestId)}
+                                  className="rounded-full border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-100"
+                                >
+                                  Hide key
+                                </button>
+                              </div>
+                            </div>
+                          ) : alreadyRevealed ? (
+                            <p className="text-sm text-emerald-900">
+                              API key was revealed on {formatDateTime(revealedOn)}. Submit a rotation request if you need a new one.
+                            </p>
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-3">
+                              <span className="font-mono text-lg tracking-[0.4em] text-emerald-900">••••••••••••••••</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRevealCredential(request)}
+                                disabled={!requestId || isRevealLoading}
+                                className="rounded-full border border-emerald-200 px-4 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {isRevealLoading ? 'Revealing…' : 'Reveal API key'}
+                              </button>
+                            </div>
+                          )}
+                          {apiKeyValue && (
+                            <p className="text-xs text-emerald-800">This key disappears once you leave or refresh this page. Save it somewhere safe.</p>
+                          )}
+                          {!apiKeyValue && !alreadyRevealed && (
+                            <p className="text-xs text-emerald-800">This key will be shown once. Copy it immediately after revealing.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
+        </div>
+        <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+          <span>{requestSummaryText}</span>
+          <Link
+            href="/developer/requests"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--default-primary-color)]"
+          >
+            View all requests
+            <FiChevronRight className="h-4 w-4" />
+          </Link>
         </div>
       </article>
 
@@ -612,20 +854,34 @@ export default function DeveloperPortal() {
 
             {createMode === 'update_app' && (
               <div>
-                <label className="text-sm font-medium text-gray-700">Developer App ID *</label>
-                <input
-                  type="text"
-                  value={createForm.developerAppId}
-                  onChange={(event) => setCreateForm((prev) => ({ ...prev, developerAppId: event.target.value }))}
-                  placeholder="app_123abc"
-                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[var(--default-primary-color)] focus:outline-none"
-                  disabled={isFormDisabled}
-                />
+                <label className="text-sm font-medium text-gray-700">Developer App *</label>
+                {developerAppOptions.length > 0 ? (
+                  <select
+                    value={createForm.developerAppId}
+                    onChange={(event) => setCreateForm((prev) => ({ ...prev, developerAppId: event.target.value }))}
+                    className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-[var(--default-primary-color)] focus:outline-none"
+                    disabled={isFormDisabled}
+                  >
+                    <option value="">Select a developer app</option>
+                    {developerAppOptions.map((option) => (
+                      <option key={option.appId} value={option.appId}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="mt-2 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500">
+                    No developer apps found. Create an app first, then submit an update.
+                  </p>
+                )}
               </div>
             )}
 
             <div>
-              <label className="text-sm font-medium text-gray-700">App name *</label>
+              <label className="text-sm font-medium text-gray-700">
+                App name
+                {createMode === 'create_app' && <span className="ml-1 text-red-600">*</span>}
+              </label>
               <input
                 type="text"
                 value={createForm.appName}
@@ -633,6 +889,7 @@ export default function DeveloperPortal() {
                 placeholder="Pi Commerce"
                 className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[var(--default-primary-color)] focus:outline-none"
                 disabled={isFormDisabled}
+                required={createMode === 'create_app'}
               />
             </div>
 
@@ -648,29 +905,22 @@ export default function DeveloperPortal() {
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Contact email</label>
-                <input
-                  type="email"
-                  value={createForm.contactEmail}
-                  onChange={(event) => setCreateForm((prev) => ({ ...prev, contactEmail: event.target.value }))}
-                  placeholder="you@pi.com"
-                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[var(--default-primary-color)] focus:outline-none"
-                  disabled={isFormDisabled}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Notes for EscrowPi</label>
-                <input
-                  type="text"
-                  value={createForm.notes}
-                  onChange={(event) => setCreateForm((prev) => ({ ...prev, notes: event.target.value }))}
-                  placeholder="Timeline, test accounts, etc."
-                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[var(--default-primary-color)] focus:outline-none"
-                  disabled={isFormDisabled}
-                />
-              </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Contact email
+                {createMode === 'create_app' && <span className="ml-1 text-red-600">*</span>}
+              </label>
+              <input
+                type="email"
+                value={createForm.contactEmail}
+                onChange={(event) => setCreateForm((prev) => ({ ...prev, contactEmail: event.target.value }))}
+                placeholder="you@pi.com"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[var(--default-primary-color)] focus:outline-none"
+                disabled={isFormDisabled}
+                required={createMode === 'create_app'}
+                pattern={EMAIL_REGEX_PATTERN}
+                title="Enter a valid email (example: founder@merchant.com)"
+              />
             </div>
 
             <div>
@@ -686,13 +936,13 @@ export default function DeveloperPortal() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Callback URLs (one per line)</label>
+              <label className="text-sm font-medium text-gray-700">Notes for EscrowPi</label>
               <textarea
-                value={createForm.callbackUrls}
-                onChange={(event) => setCreateForm((prev) => ({ ...prev, callbackUrls: event.target.value }))}
-                rows={2}
+                value={createForm.notes}
+                onChange={(event) => setCreateForm((prev) => ({ ...prev, notes: event.target.value }))}
+                rows={3}
                 className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[var(--default-primary-color)] focus:outline-none"
-                placeholder={'https://merchant.one/api/escrowpi/return'}
+                placeholder="Timeline, test accounts, environments, or compliance context."
                 disabled={isFormDisabled}
               />
             </div>
@@ -720,15 +970,28 @@ export default function DeveloperPortal() {
           </div>
           <form className="mt-4 space-y-4" onSubmit={handleSubmitRotateRequest}>
             <div>
-              <label className="text-sm font-medium text-gray-700">Developer App ID *</label>
-              <input
-                type="text"
-                value={rotateForm.developerAppId}
-                onChange={(event) => setRotateForm((prev) => ({ ...prev, developerAppId: event.target.value }))}
-                placeholder="app_123abc"
-                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[var(--default-primary-color)] focus:outline-none"
-                disabled={isFormDisabled}
-              />
+              <label className="text-sm font-medium text-gray-700">Developer App *</label>
+              {developerAppOptions.length > 0 ? (
+                <select
+                  value={rotateForm.developerAppId}
+                  onChange={(event) =>
+                    setRotateForm((prev) => ({ ...prev, developerAppId: event.target.value }))
+                  }
+                  className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-[var(--default-primary-color)] focus:outline-none"
+                  disabled={isFormDisabled}
+                >
+                  <option value="">Select a developer app</option>
+                  {developerAppOptions.map((option) => (
+                    <option key={option.appId} value={option.appId}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="mt-2 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500">
+                  No developer apps found. Create an app first to request a rotation.
+                </p>
+              )}
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700">Reason *</label>
@@ -806,6 +1069,15 @@ export default function DeveloperPortal() {
         </a>{' '}
         and our team will follow up.
       </footer>
+      <ConfirmDialog
+        open={Boolean(hideConfirmRequestId)}
+        title="Hide API key?"
+        description="Make sure you have copied the API key to a safe place before hiding it."
+        confirmLabel="Hide key"
+        cancelLabel="Keep it visible"
+        onConfirm={handleConfirmHideCredential}
+        onCancel={handleCancelHideCredential}
+      />
     </section>
   );
 }

@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { FiHelpCircle, FiMenu, FiFileText } from 'react-icons/fi';
 import { IoMdArrowBack, IoMdClose } from 'react-icons/io';
 import { MdHome } from 'react-icons/md';
@@ -64,6 +64,17 @@ export default function Navbar() {
 
   const providerLocked = !!pathname && pathname.includes('/provider');
   const disabled = isHomePage || providerLocked;
+
+  const handleInternalNav = useCallback(
+    (targetPath: string) => {
+      if (!targetPath) return;
+      if ((pathname ?? '') !== targetPath) {
+        router.push(targetPath);
+      }
+      setSidebarOpen(false);
+    },
+    [pathname, router]
+  );
 
   useEffect(() => {
     if (providerLocked && sidebarOpen) {
@@ -287,7 +298,7 @@ export default function Navbar() {
 
               <div className="space-y-3">
                 <button
-                  onClick={() => { router.push('/developer'); setSidebarOpen(false); }}
+                  onClick={() => handleInternalNav('/developer')}
                   className="w-full px-4 py-3 rounded-md text-base flex items-center justify-center border"
                   style={{
                     borderColor: 'var(--default-primary-color)',
@@ -298,7 +309,7 @@ export default function Navbar() {
                 </button>
                 {currentUser?.isAdmin && (
                   <button
-                    onClick={() => { router.push('/admin'); setSidebarOpen(false); }}
+                    onClick={() => handleInternalNav('/admin')}
                     className="w-full px-4 py-3 rounded-md text-base flex items-center justify-center border"
                     style={{
                       borderColor: 'var(--default-primary-color)',

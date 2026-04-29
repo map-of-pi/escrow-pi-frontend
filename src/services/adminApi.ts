@@ -44,7 +44,7 @@ export const removeAdminUser = async (piUid: string, piAccessToken: string): Pro
 };
 
 type AdminDeveloperRequestFilters = {
-  status?: DeveloperRequestStatus;
+  status?: string;
   requestType?: DeveloperRequestType;
   limit?: number;
 };
@@ -83,3 +83,30 @@ export const fetchAdminDeveloperApps = async (piAccessToken: string): Promise<De
   });
   return (data.apps ?? []) as DeveloperAppRecord[];
 };
+
+const postAdminDeveloperAppAction = async (
+  appId: string,
+  action: 'suspend' | 'reactivate',
+  piAccessToken: string
+): Promise<DeveloperAppRecord> => {
+  const { data } = await axiosClient.post(
+    `/admin/developer-apps/${appId}/${action}`,
+    {},
+    {
+      headers: {
+        Authorization: `Bearer ${piAccessToken}`,
+      },
+    }
+  );
+  return data.app as DeveloperAppRecord;
+};
+
+export const suspendAdminDeveloperApp = async (
+  appId: string,
+  piAccessToken: string
+): Promise<DeveloperAppRecord> => postAdminDeveloperAppAction(appId, 'suspend', piAccessToken);
+
+export const reactivateAdminDeveloperApp = async (
+  appId: string,
+  piAccessToken: string
+): Promise<DeveloperAppRecord> => postAdminDeveloperAppAction(appId, 'reactivate', piAccessToken);

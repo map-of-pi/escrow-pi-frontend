@@ -8,6 +8,7 @@ import { onIncompletePaymentFound } from "@/config/payment";
 import { AppContext } from "@/context/AppContextProvider";
 import { fetchAdminDeveloperApps } from "@/services/adminApi";
 import { DeveloperAppRecord } from "@/services/developerApps";
+import { ADMIN_PRIMARY_COLOR, ADMIN_ACCENT_COLOR, ADMIN_PAGE_BACKGROUND, ADMIN_SURFACE_STYLE } from "../theme";
 
 const PI_SDK_SCRIPT_ID = "escrowpi-admin-pi-sdk";
 
@@ -168,6 +169,21 @@ export default function AdminDeveloperAppsPage() {
     }
   }, [piToken, refreshDeveloperApps]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const { body, documentElement } = document;
+    const previousBodyBackground = body.style.background;
+    const previousHtmlBackground = documentElement.style.background;
+    body.style.background = ADMIN_PAGE_BACKGROUND;
+    documentElement.style.background = ADMIN_PAGE_BACKGROUND;
+    return () => {
+      body.style.background = previousBodyBackground;
+      documentElement.style.background = previousHtmlBackground;
+    };
+  }, []);
+
   const toggleAppExpansion = useCallback((appId: string) => {
     if (!appId) return;
     setExpandedAppIds((prev) => {
@@ -202,7 +218,7 @@ export default function AdminDeveloperAppsPage() {
         <p className="text-gray-600 max-w-sm">
           Your account does not have admin privileges. Ask an existing admin to grant you access from the admin console.
         </p>
-        <Link href="/admin" className="text-sm font-semibold text-[var(--default-primary-color)]">
+        <Link href="/admin" className="text-sm font-semibold" style={{ color: ADMIN_PRIMARY_COLOR }}>
           Back to admin console
         </Link>
       </section>
@@ -210,19 +226,28 @@ export default function AdminDeveloperAppsPage() {
   }
 
   return (
-    <section className="flex flex-col gap-6 py-6">
-      <header className="space-y-2 text-center">
-        <p className="text-xs uppercase tracking-[0.3em] text-neutral-500">EscrowPi Admin Console</p>
-        <h1 className="text-3xl font-semibold text-gray-900">All developer apps</h1>
-        <p className="text-gray-600">
-          Browse every developer app in EscrowPi, inspect allowed origins, and track ownership details without pagination limits.
-        </p>
-      </header>
+    <div className="min-h-screen" style={{ background: ADMIN_PAGE_BACKGROUND }}>
+      <section className="mx-auto flex w-full max-w-5xl flex-col gap-6 py-6">
+        <header className="space-y-3">
+          <p className="text-xs uppercase tracking-[0.3em]" style={{ color: ADMIN_ACCENT_COLOR }}>EscrowPi Admin Console</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="flex-1 text-3xl font-semibold text-gray-900">All developer apps</h1>
+            <Link
+              href="/admin"
+              className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+            >
+              Back to dashboard
+            </Link>
+          </div>
+          <p className="text-sm text-gray-600">
+            Browse every developer app in EscrowPi, inspect allowed origins, and track ownership details without pagination limits.
+          </p>
+        </header>
 
-      <article className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <article className="rounded-2xl border p-5 shadow-sm" style={ADMIN_SURFACE_STYLE}>
         <div className="flex flex-wrap items-center gap-3">
           <div>
-            <p className="text-xs uppercase tracking-widest text-gray-500">Developer apps roster</p>
+            <p className="text-xs uppercase tracking-widest" style={{ color: ADMIN_PRIMARY_COLOR }}>Developer apps roster</p>
             <h2 className="text-xl font-semibold text-gray-900">
               Complete EscrowPi catalog
               <span className="ml-2 text-sm font-normal text-gray-500">({developerApps.length} apps)</span>
@@ -305,12 +330,8 @@ export default function AdminDeveloperAppsPage() {
             );
           })}
         </div>
-        <div className="mt-6 text-right">
-          <Link href="/admin" className="text-sm font-semibold text-[var(--default-primary-color)]">
-            Back to admin overview
-          </Link>
-        </div>
       </article>
-    </section>
+      </section>
+    </div>
   );
 }
