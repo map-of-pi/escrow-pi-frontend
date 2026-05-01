@@ -27,10 +27,10 @@ import {
   summarizeRequest,
 } from './requestUtils';
 
-const DOC_ENV = process.env.NEXT_PUBLIC_DOC_ENV ?? 'dev';
-const DOC_BASE = `https://escrowpi-doc-${DOC_ENV}.vercel.app`;
-const SWAGGER_URL = `${DOC_BASE}/api-docs_`;
-const DEVELOPER_GUIDE_URL = `${DOC_BASE}/developer-guide`;
+const DOC_BASE = process.env.NEXT_PUBLIC_DOC_BASE ?? `http://localhost:4000`;
+const SWAGGER_URL = `${DOC_BASE}/api-docs`;
+const DEVELOPER_GUIDE_URL = '/developer/developer-guide';
+
 const CONTACT_EMAIL = 'philip@mapofpi.com';
 
 const PRIMARY_COLOR = 'var(--default-primary-color)';
