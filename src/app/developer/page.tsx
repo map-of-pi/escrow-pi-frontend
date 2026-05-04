@@ -31,7 +31,7 @@ const DOC_BASE = process.env.NEXT_PUBLIC_DOC_BASE ?? `http://localhost:4000`;
 const SWAGGER_URL = `${DOC_BASE}/api-docs`;
 const DEVELOPER_GUIDE_URL = '/developer/developer-guide';
 
-const CONTACT_EMAIL = 'philip@mapofpi.com';
+const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? 'philip@mapofpi.com';
 
 const PRIMARY_COLOR = 'var(--default-primary-color)';
 const SECONDARY_COLOR = 'var(--default-secondary-color)';

@@ -33,6 +33,30 @@ export default function Navbar() {
   const isHistoryList = (pathname ?? '') === '/history';
   const backHref = isTxDetails ? '/history' : isHistoryList ? '/?skipSplash=1' : '/?skipSplash=1';
 
+  const handleBack = useCallback(() => {
+    const fallbackNavigate = () => {
+      try {
+        router.push(backHref);
+      } catch {
+        window.location.href = backHref;
+      }
+    };
+
+    try {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem('escrowpi:cameFromInternalNav', '1');
+        if (window.history.length > 1) {
+          router.back();
+          return;
+        }
+      }
+    } catch {
+      // ignore and use fallback below
+    }
+
+    fallbackNavigate();
+  }, [backHref, router]);
+
   const apiDocsUrl = `https://escrowpi-doc-${process.env.NEXT_PUBLIC_DOC_ENV}.vercel.app/api-docs_`;
 
   // Determine readiness without touching <body> attributes
@@ -154,24 +178,17 @@ export default function Navbar() {
                 <IoMdArrowBack size={26} className={`text-[var(--default-tertiary-color)]`} />
               </span>
             ) : (
-              <Link
-                href={backHref}
+              <button
+                type="button"
                 aria-label="Back"
                 className="w-full h-full flex items-center justify-center"
                 onClick={(e) => {
-                  try {
-                    e.preventDefault();
-                    if (typeof window !== 'undefined') {
-                      window.sessionStorage.setItem('escrowpi:cameFromInternalNav', '1');
-                    }
-                    router.push(backHref);
-                  } catch {
-                    window.location.href = backHref;
-                  }
+                  e.preventDefault();
+                  handleBack();
                 }}
               >
                 <IoMdArrowBack size={26} className={`text-[var(--default-secondary-color)]`} />
-              </Link>
+              </button>
             )}
           </div>
 
