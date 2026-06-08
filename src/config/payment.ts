@@ -37,11 +37,11 @@ export const payWithPi = async (paymentData: PaymentDataType, onComplete:any, on
 
   const onError = (error: Error, paymentDTO?: PaymentDTO) => {
     if (paymentDTO) {
-      return axiosClient.post('/payments/error', { paymentDTO, error }, config).then((res)=>{
+      axiosClient.post('/payments/error', { paymentDTO, error }, config).then((res)=>{
         onComplete(res.data);
-      }).catch((error) => {
-        console.error('Error completing payment: ', error);
-        onFail(error);
+      }).catch((submitError) => {
+        console.error('Error completing payment: ', submitError);
+        onFail(submitError);
       });
     }
   }
@@ -53,6 +53,10 @@ export const payWithPi = async (paymentData: PaymentDataType, onComplete:any, on
     onCancel,
     onError
   };
+
+  if (typeof window === "undefined" || !window.Pi) {
+    throw new Error("Pi SDK is not available. Please open this flow inside Pi Browser.");
+  }
 
   const paymentId = await window.Pi.createPayment(
     paymentData, 

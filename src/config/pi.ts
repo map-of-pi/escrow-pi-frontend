@@ -51,6 +51,16 @@ export interface PiType {
   init: (config: InitParams) => void;
   initialized: boolean;
   nativeFeaturesList(): Promise<("inline_media" | "request_permission" | "ad_network")[]>;
+  createPayment(
+    paymentData: Record<string, any>,
+    callbacks: {
+      onReadyForServerApproval: (paymentId: string) => void;
+      onReadyForServerCompletion: (paymentId: string, txid: string) => void;
+      onIncompletePaymentFound: OnIncompletePaymentFoundType;
+      onCancel: (paymentId: string) => void;
+      onError: (error: Error, paymentDTO?: PaymentDTO) => void;
+    }
+  ): Promise<string>;
   Ads: {
     showAd: (adType: AdType) => Promise<ShowAdResponse>
     isAdReady: (adType: AdType) => Promise<IsAdReadyResponse>
