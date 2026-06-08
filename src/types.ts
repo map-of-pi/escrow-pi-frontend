@@ -2,6 +2,7 @@ export interface IUser {
   pi_uid: string;
   pi_username: string;
   user_name: string;
+  isAdmin?: boolean;
 };
 
 export type PaymentDataType = {
@@ -25,6 +26,12 @@ export type IOrder = {
   status: string;
   createdAt: Date;
   updatedAt: Date;
+  developer_app_name?: string;
+  developer_fee?: {
+    developer_app_id?: string | null;
+    developer_pi_uid?: string | null;
+    percent?: number | null;
+  } | null;
   dispute?: {
     is_disputed?: boolean;
     status?: 'none' | 'proposed' | 'accepted' | 'declined' | 'cancelled';

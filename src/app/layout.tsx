@@ -46,7 +46,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
-        <title>EscrowPi Wallet</title>
         <base href="/" />
         <meta
           name="viewport"

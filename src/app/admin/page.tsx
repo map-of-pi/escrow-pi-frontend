@@ -1,0 +1,696 @@
+"use client";
+
+import Link from 'next/link';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { toast } from 'react-toastify';
+import { FiChevronDown, FiChevronRight, FiLoader, FiRefreshCw, FiShield } from 'react-icons/fi';
+
+import { onIncompletePaymentFound } from '@/config/payment';
+import { AppContext } from '@/context/AppContextProvider';
+import {
+  fetchAdminDeveloperApps,
+  fetchAdminDeveloperRequests,
+  reactivateAdminDeveloperApp,
+  suspendAdminDeveloperApp,
+  updateAdminDeveloperRequest,
+} from '@/services/adminApi';
+import { DeveloperAppRecord } from '@/services/developerApps';
+import { DeveloperRequestRecord, DeveloperRequestStatus } from '@/services/developerRequests';
+import {
+  formatDateTime,
+  formatFieldLabel,
+  formatFieldValue,
+  REQUEST_STATUS_ACTIONS,
+  REQUEST_STATUS_STYLES,
+  REQUEST_ACTION_CONFIG,
+  summarizeRequest,
+  recordTimestamp,
+} from './requestUtils';
+import {
+  ADMIN_PRIMARY_COLOR,
+  ADMIN_ACCENT_COLOR,
+  ADMIN_PAGE_BACKGROUND,
+  ADMIN_SURFACE_STYLE,
+} from './theme';
+
+type PiAuthState = 'idle' | 'authenticating' | 'ready' | 'error';
+
+const getDeveloperAppStatusStyle = (status?: string) => {
+  const normalized = (status ?? 'active').toLowerCase();
+  if (normalized === 'suspended') {
+    return { label: 'Suspended', className: 'bg-amber-100 text-amber-800' };
+  }
+  if (normalized === 'inactive') {
+    return { label: 'Inactive', className: 'bg-gray-100 text-gray-800' };
+  }
+  if (normalized === 'pending') {
+    return { label: 'Pending', className: 'bg-indigo-100 text-indigo-800' };
+  }
+  return { label: 'Active', className: 'bg-emerald-100 text-emerald-800' };
+};
+
+const describeError = (err: any) => {
+  const message = err?.response?.data?.message ?? err?.message;
+  if (typeof message === 'string' && message.trim().length) {
+    return message.trim();
+  }
+  return 'Something went wrong. Please retry.';
+};
+
+
+export default function AdminConsolePage() {
+  const {
+    currentUser,
+    piAccessToken: contextPiToken,
+    setPiAccessToken,
+    authenticateWithPi: contextAuthenticateWithPi,
+  } = useContext(AppContext);
+  const [piToken, setPiToken] = useState<string | null>(contextPiToken ?? null);
+  const [piAuthState, setPiAuthState] = useState<PiAuthState>(contextPiToken ? 'ready' : 'idle');
+  const [piAuthError, setPiAuthError] = useState<string | null>(null);
+
+  const [developerApps, setDeveloperApps] = useState<DeveloperAppRecord[]>([]);
+  const [appsLoading, setAppsLoading] = useState(false);
+  const [appsError, setAppsError] = useState<string | null>(null);
+
+  const [developerRequests, setDeveloperRequests] = useState<DeveloperRequestRecord[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [requestsError, setRequestsError] = useState<string | null>(null);
+  const [requestActionLoading, setRequestActionLoading] = useState<string | null>(null);
+  const [expandedRequestIds, setExpandedRequestIds] = useState<Set<string>>(new Set());
+  const [expandedAppIds, setExpandedAppIds] = useState<Set<string>>(new Set());
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [appStatusUpdating, setAppStatusUpdating] = useState<string | null>(null);
+
+  const isAdmin = currentUser?.isAdmin === true;
+
+  const authenticateWithPi = useCallback(async (): Promise<string> => {
+    setPiAuthState('authenticating');
+    setPiAuthError(null);
+    try {
+      const pioneerAuth = await contextAuthenticateWithPi();
+      setPiToken(pioneerAuth.accessToken);
+      setPiAccessToken(pioneerAuth.accessToken);
+      setPiAuthState('ready');
+      toast.success('Pi authentication complete.');
+      return pioneerAuth.accessToken;
+    } catch (err) {
+      const message = describeError(err);
+      setPiAuthState('error');
+      setPiAuthError(message);
+      toast.error(message);
+      throw err;
+    }
+  }, [contextAuthenticateWithPi, setPiAccessToken]);
+
+  const ensurePiToken = useCallback(async () => {
+    if (piToken) {
+      return piToken;
+    }
+    if (contextPiToken) {
+      setPiToken(contextPiToken);
+      setPiAuthState('ready');
+      setPiAuthError(null);
+      return contextPiToken;
+    }
+    return authenticateWithPi();
+  }, [piToken, contextPiToken, authenticateWithPi]);
+
+  const refreshDeveloperApps = useCallback(async () => {
+    setAppsLoading(true);
+    setAppsError(null);
+    try {
+      const token = await ensurePiToken();
+      if (!token) {
+        return;
+      }
+      const apps = await fetchAdminDeveloperApps(token);
+      setDeveloperApps(apps);
+    } catch (err) {
+      const message = describeError(err);
+      setAppsError(message);
+      toast.error(message);
+    } finally {
+      setAppsLoading(false);
+    }
+  }, [ensurePiToken]);
+
+  const refreshDeveloperRequests = useCallback(async () => {
+    setRequestsLoading(true);
+    setRequestsError(null);
+    try {
+      const token = await ensurePiToken();
+      if (!token) {
+        return;
+      }
+      const records = await fetchAdminDeveloperRequests({ limit: 100 }, token);
+      setDeveloperRequests(records);
+      setNoteDrafts((prev) => {
+        const next: Record<string, string> = {};
+        records.forEach((request) => {
+          if (!request.id) return;
+          next[request.id] = prev[request.id] ?? request.adminNotes ?? '';
+        });
+        return next;
+      });
+    } catch (err) {
+      const message = describeError(err);
+      setRequestsError(message);
+      toast.error(message);
+    } finally {
+      setRequestsLoading(false);
+    }
+  }, [ensurePiToken]);
+
+  const handleRefreshRequests = useCallback(() => {
+    refreshDeveloperRequests();
+  }, [refreshDeveloperRequests]);
+
+  const handleDeveloperAppStatusChange = useCallback(
+    async (appId: string | null, action: 'suspend' | 'reactivate') => {
+      if (!appId) {
+        return;
+      }
+      try {
+        setAppStatusUpdating(appId);
+        const token = await ensurePiToken();
+        if (!token) {
+          return;
+        }
+        const updater = action === 'suspend' ? suspendAdminDeveloperApp : reactivateAdminDeveloperApp;
+        const updatedApp = await updater(appId, token);
+        setDeveloperApps((prev) => prev.map((app) => (app.appId === updatedApp.appId ? updatedApp : app)));
+        toast.success(action === 'suspend' ? 'Developer app suspended.' : 'Developer app reactivated.');
+      } catch (err) {
+        const message = describeError(err);
+        toast.error(message);
+      } finally {
+        setAppStatusUpdating(null);
+      }
+    },
+    [ensurePiToken]
+  );
+
+  useEffect(() => {
+    if (contextPiToken && contextPiToken !== piToken) {
+      setPiToken(contextPiToken);
+      setPiAuthState('ready');
+      setPiAuthError(null);
+    }
+  }, [contextPiToken, piToken]);
+
+  useEffect(() => {
+    if (!piToken && !contextPiToken && piAuthState === 'idle') {
+      authenticateWithPi().catch(() => {});
+    }
+  }, [piToken, contextPiToken, piAuthState, authenticateWithPi]);
+
+  useEffect(() => {
+    if (piToken) {
+      refreshDeveloperApps();
+      refreshDeveloperRequests();
+    }
+  }, [piToken, refreshDeveloperApps, refreshDeveloperRequests]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const { body, documentElement } = document;
+    const previousBodyBackground = body.style.background;
+    const previousHtmlBackground = documentElement.style.background;
+    body.style.background = ADMIN_PAGE_BACKGROUND;
+    documentElement.style.background = ADMIN_PAGE_BACKGROUND;
+    return () => {
+      body.style.background = previousBodyBackground;
+      documentElement.style.background = previousHtmlBackground;
+    };
+  }, []);
+
+  const toggleRequestExpansion = useCallback((requestId: string | null) => {
+    if (!requestId) {
+      return;
+    }
+    setExpandedRequestIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(requestId)) {
+        next.delete(requestId);
+      } else {
+        next.add(requestId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleAppExpansion = useCallback((appId: string | null) => {
+    if (!appId) {
+      return;
+    }
+    setExpandedAppIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(appId)) {
+        next.delete(appId);
+      } else {
+        next.add(appId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleNoteChange = useCallback((requestId: string, value: string) => {
+    if (!requestId) return;
+    setNoteDrafts((prev) => ({ ...prev, [requestId]: value }));
+  }, []);
+
+  const handleSaveNotes = useCallback(
+    async (requestId: string) => {
+      if (!requestId) return;
+      try {
+        setRequestActionLoading(requestId);
+        const token = await ensurePiToken();
+        if (!token) {
+          return;
+        }
+        const draft = noteDrafts[requestId]?.trim() ?? '';
+        const payload = { adminNotes: draft.length ? draft : null };
+        const updated = await updateAdminDeveloperRequest(requestId, payload, token);
+        setDeveloperRequests((prev) => prev.map((req) => (req.id === updated.id ? updated : req)));
+        setNoteDrafts((prev) => ({ ...prev, [requestId]: updated.adminNotes ?? '' }));
+        toast.success('Notes saved.');
+      } catch (err) {
+        toast.error(describeError(err));
+      } finally {
+        setRequestActionLoading(null);
+      }
+    },
+    [ensurePiToken, noteDrafts]
+  );
+
+  const handleSetRequestStatus = useCallback(
+    async (requestId: string, status: DeveloperRequestStatus) => {
+      if (!requestId) return;
+      try {
+        setRequestActionLoading(requestId);
+        const token = await ensurePiToken();
+        if (!token) {
+          return;
+        }
+        const draft = noteDrafts[requestId];
+        const payload: { status: DeveloperRequestStatus; adminNotes?: string | null } = { status };
+        if (typeof draft === 'string') {
+          const trimmed = draft.trim();
+          payload.adminNotes = trimmed.length ? trimmed : null;
+        }
+        const updated = await updateAdminDeveloperRequest(requestId, payload, token);
+        setDeveloperRequests((prev) => prev.map((req) => (req.id === updated.id ? updated : req)));
+        setNoteDrafts((prev) => ({ ...prev, [requestId]: updated.adminNotes ?? '' }));
+        toast.success(`Request marked ${REQUEST_STATUS_STYLES[status].label.toLowerCase()}.`);
+      } catch (err) {
+        toast.error(describeError(err));
+      } finally {
+        setRequestActionLoading(null);
+      }
+    },
+    [ensurePiToken, noteDrafts]
+  );
+
+  const piStatusMessage = useMemo(() => {
+    if (piAuthState === 'authenticating') {
+      return 'Authenticating with Pi…';
+    }
+    if (piAuthState === 'ready' && piToken) {
+      return 'Using your current EscrowPi session.';
+    }
+    if (piAuthState === 'error') {
+      return piAuthError ?? 'Pi authentication required.';
+    }
+    return 'Pi session will sync automatically when needed.';
+  }, [piAuthState, piToken, piAuthError]);
+
+  const developerAppRequests = useMemo(
+    () => developerRequests.filter((request) => request.requestType !== 'rotate_api_key'),
+    [developerRequests]
+  );
+  const apiKeyRequests = useMemo(
+    () => developerRequests.filter((request) => request.requestType === 'rotate_api_key'),
+    [developerRequests]
+  );
+  const sortedApiKeyRequests = useMemo(
+    () => [...apiKeyRequests].sort((a, b) => recordTimestamp(b) - recordTimestamp(a)),
+    [apiKeyRequests]
+  );
+  const visibleDeveloperApps = useMemo(() => developerApps.slice(0, 3), [developerApps]);
+  const sortedAppRequests = useMemo(
+    () => [...developerAppRequests].sort((a, b) => recordTimestamp(b) - recordTimestamp(a)),
+    [developerAppRequests]
+  );
+  const appRequestPreview = useMemo(() => sortedAppRequests.slice(0, 3), [sortedAppRequests]);
+  const totalOnboardingRequests = developerAppRequests.length;
+  const requestSummaryText = useMemo(() => {
+    if (totalOnboardingRequests === 0) {
+      return 'No developer requests yet.';
+    }
+    if (totalOnboardingRequests <= 3) {
+      return `Showing all ${totalOnboardingRequests} requests.`;
+    }
+    return `Showing the latest 3 of ${totalOnboardingRequests} requests.`;
+  }, [totalOnboardingRequests]);
+  const apiKeyRequestPreview = useMemo(() => sortedApiKeyRequests.slice(0, 3), [sortedApiKeyRequests]);
+  const totalSecurityRequests = sortedApiKeyRequests.length;
+  const securitySummaryText = useMemo(() => {
+    if (totalSecurityRequests === 0) {
+      return 'No rotation requests yet.';
+    }
+    if (totalSecurityRequests <= 3) {
+      return `Showing all ${totalSecurityRequests} rotation requests.`;
+    }
+    return `Showing the latest 3 of ${totalSecurityRequests} rotation requests.`;
+  }, [totalSecurityRequests]);
+
+  const renderRequestCard = useCallback(
+    (request: DeveloperRequestRecord, index: number) => {
+      const requestId = request.id ?? null;
+      const isExpanded = requestId ? expandedRequestIds.has(requestId) : false;
+      const statusStyle = REQUEST_STATUS_STYLES[request.status];
+      const noteDraft = requestId ? noteDrafts[requestId] ?? request.adminNotes ?? '' : request.adminNotes ?? '';
+      const actionLoading = requestActionLoading === requestId;
+      const key = request.id ?? `${request.requestType}-${index}`;
+      const requestActions = REQUEST_STATUS_ACTIONS[request.status] ?? [];
+
+      const formEntries = Object.entries(request.formData ?? {}).filter(([key]) => key !== 'callbackUrls');
+
+      return (
+        <div key={key} className="rounded-2xl border p-4 shadow-sm" style={ADMIN_SURFACE_STYLE}>
+          <button
+            type="button"
+            onClick={() => toggleRequestExpansion(requestId)}
+            className="flex w-full flex-wrap items-center gap-3 text-left sm:flex-nowrap"
+            disabled={!requestId}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-sm font-semibold text-gray-900">{summarizeRequest(request)}</p>
+              <p className="text-xs text-gray-500">
+                {request.piUsername ?? 'Unknown pioneer'} · Created {formatDateTime(request.createdAt)}
+              </p>
+            </div>
+            <span className={`inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${statusStyle.className}`}>
+              {statusStyle.label}
+            </span>
+            <span className="text-gray-400">{isExpanded ? <FiChevronDown /> : <FiChevronRight />}</span>
+          </button>
+          {isExpanded && (
+            <div className="mt-4 space-y-4 text-sm text-gray-700">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-500">Pi UID</p>
+                  <p className="break-all font-medium text-gray-900">{request.piUid ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-500">App ID</p>
+                  <p className="break-all font-medium text-gray-900">{request.developerAppId ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-500">Updated</p>
+                  <p className="font-medium text-gray-900">{formatDateTime(request.updatedAt)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-500">Handled by</p>
+                  <p className="break-words font-medium text-gray-900">{request.handledBy ?? 'Unassigned'}</p>
+                </div>
+              </div>
+              {formEntries.length > 0 && (
+                <div className="space-y-2 rounded-xl bg-gray-50 p-3">
+                  {formEntries.map(([entryKey, value]) => (
+                    <div key={entryKey}>
+                      <p className="text-xs uppercase tracking-widest text-gray-500">{formatFieldLabel(entryKey)}</p>
+                      <p className="whitespace-pre-wrap break-words text-sm font-medium text-gray-900">{formatFieldValue(value)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {requestId && (
+                <div className="space-y-2">
+                  <label className="text-xs uppercase tracking-widest text-gray-500">Admin notes</label>
+                  <textarea
+                    value={noteDraft}
+                    onChange={(event) => handleNoteChange(requestId, event.target.value)}
+                    rows={3}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#1f3c88] focus:outline-none focus:ring-2 focus:ring-[#1f3c88]/20"
+                    placeholder="Document context, next steps, or blockers."
+                  />
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveNotes(requestId)}
+                      disabled={actionLoading}
+                      className="rounded-full border border-gray-200 px-3 py-1.5 font-semibold text-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {actionLoading ? 'Saving…' : 'Save note'}
+                    </button>
+                    {requestActions.map((target) => {
+                      const config = REQUEST_ACTION_CONFIG[target];
+                      return (
+                        <button
+                          key={target}
+                          type="button"
+                          onClick={() => handleSetRequestStatus(requestId, target)}
+                          disabled={actionLoading}
+                          className={`rounded-full px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${config.className}`}
+                        >
+                          {config.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    },
+    [expandedRequestIds, handleNoteChange, handleSaveNotes, handleSetRequestStatus, noteDrafts, requestActionLoading, toggleRequestExpansion]
+  );
+
+  if (!isAdmin) {
+    return (
+      <section className="flex flex-col items-center gap-4 py-12 text-center">
+        <FiShield size={48} className="text-red-500" />
+        <h1 className="text-2xl font-semibold text-gray-900">Admin access required</h1>
+        <p className="text-gray-600 max-w-sm">
+          Your account does not have admin privileges. Ask an existing admin to grant you access from the admin console.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <div className="min-h-screen" style={{ background: ADMIN_PAGE_BACKGROUND }}>
+      <section className="mx-auto flex w-full max-w-5xl flex-col gap-6 py-6">
+        <header className="space-y-2 text-center">
+          <p className="text-xs uppercase tracking-[0.3em]" style={{ color: ADMIN_ACCENT_COLOR }}>EscrowPi Admin Console</p>
+          <h1 className="text-3xl font-semibold text-gray-900">Review developer access</h1>
+          <p className="text-gray-600">
+            Manage admin permissions, approve developer onboarding, and respond to API key rotation requests without leaving Pi Browser.
+          </p>
+        </header>
+
+        <article className="rounded-2xl border p-5 shadow-sm" style={ADMIN_SURFACE_STYLE}>
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-widest" style={{ color: ADMIN_PRIMARY_COLOR }}>Developer apps</p>
+              <h2 className="text-xl font-semibold text-gray-900">Current EscrowPi integrations</h2>
+            </div>
+            <button
+              type="button"
+              onClick={refreshDeveloperApps}
+              disabled={appsLoading}
+              title="Refresh apps"
+              className="ml-auto rounded-full border border-gray-200 p-3 text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {appsLoading ? <FiLoader className="h-5 w-5 animate-spin" /> : <FiRefreshCw className="h-5 w-5" />}
+            </button>
+          </div>
+          <p className="mt-2 text-sm text-gray-600">Review the apps linked to your pioneers and keep tabs on their status.</p>
+          <p className="mt-1 text-xs text-gray-500">{piStatusMessage}</p>
+          {appsError && <p className="mt-3 text-sm text-red-600">{appsError}</p>}
+          {!appsError && appsLoading && <p className="mt-3 text-sm text-gray-500">Refreshing developer apps…</p>}
+          {!appsError && !appsLoading && developerApps.length === 0 && (
+            <p className="mt-4 text-sm text-gray-500">No developer apps found yet.</p>
+          )}
+          <div className="mt-4 space-y-3">
+            {visibleDeveloperApps.map((app) => {
+              const statusStyle = getDeveloperAppStatusStyle(app.status);
+              const normalizedStatus = (app.status ?? '').toLowerCase();
+              const isExpanded = expandedAppIds.has(app.appId);
+              return (
+                <div key={app.appId} className="rounded-2xl border border-gray-100 bg-white/90 p-4 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => toggleAppExpansion(app.appId)}
+                    className="flex w-full items-center gap-3 text-left"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{app.name}</p>
+                      <p className="text-xs text-gray-500">App ID: {app.appId}</p>
+                    </div>
+                    <span className={`ml-auto inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusStyle.className}`}>
+                      {statusStyle.label}
+                    </span>
+                    <span className="text-gray-400">{isExpanded ? <FiChevronDown /> : <FiChevronRight />}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="mt-3 space-y-3 text-sm text-gray-700">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <p className="text-xs uppercase tracking-widest text-gray-500">Developer Pi UID</p>
+                          <p className="font-medium text-gray-900">{app.developerPiUid}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-widest text-gray-500">Contact email</p>
+                          <p className="font-medium text-gray-900">{app.contactEmail ?? '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-widest text-gray-500">Allowed origins</p>
+                          <p className="font-medium text-gray-900">
+                            {app.allowedOrigins && app.allowedOrigins.length
+                              ? app.allowedOrigins.join(', ')
+                              : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-widest text-gray-500">Last used</p>
+                          <p className="font-medium text-gray-900">{formatDateTime(app.lastUsedAt)}</p>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        <p>Created {formatDateTime(app.createdAt)} · Updated {formatDateTime(app.updatedAt)}</p>
+                      </div>
+                      <div className="flex justify-end pt-0 text-xs">
+                        {normalizedStatus === 'suspended' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeveloperAppStatusChange(app.appId, 'reactivate')}
+                            disabled={appStatusUpdating === app.appId}
+                            className="rounded-full border border-emerald-200 px-3 py-1.5 font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {appStatusUpdating === app.appId ? 'Updating…' : 'Reactivate app'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleDeveloperAppStatusChange(app.appId, 'suspend')}
+                            disabled={appStatusUpdating === app.appId}
+                            className="rounded-full border border-gray-200 px-3 py-1.5 font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {appStatusUpdating === app.appId ? 'Updating…' : 'Suspend app'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+            <span>
+              {developerApps.length === 0
+                ? 'No developer apps yet.'
+                : developerApps.length <= visibleDeveloperApps.length
+                  ? `Showing all ${developerApps.length} apps.`
+                  : `Showing ${visibleDeveloperApps.length} of ${developerApps.length} apps.`}
+            </span>
+            <Link
+              href="/admin/dev-apps"
+              className="inline-flex items-center gap-2 text-sm font-semibold"
+              style={{ color: ADMIN_PRIMARY_COLOR }}
+            >
+              View all apps
+              <FiChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </article>
+
+        <article className="rounded-2xl border p-5 shadow-sm" style={ADMIN_SURFACE_STYLE}>
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-widest" style={{ color: ADMIN_PRIMARY_COLOR }}>Developer app requests</p>
+              <h2 className="text-xl font-semibold text-gray-900">Onboarding Requests</h2>
+            </div>
+            <button
+              type="button"
+              onClick={handleRefreshRequests}
+              disabled={requestsLoading}
+              title="Refresh requests"
+              className="ml-auto rounded-full border border-gray-200 p-3 text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {requestsLoading ? <FiLoader className="h-5 w-5 animate-spin" /> : <FiRefreshCw className="h-5 w-5" />}
+            </button>
+          </div>
+          <p className="mt-2 text-sm text-gray-600">Expand a request to review details, leave notes, and update status.</p>
+          {requestsError && <p className="mt-3 text-sm text-red-600">{requestsError}</p>}
+          {!requestsError && developerAppRequests.length === 0 && !requestsLoading && (
+            <p className="mt-4 text-sm text-gray-500">No developer onboarding requests yet.</p>
+          )}
+          {requestsLoading && (
+            <p className="mt-4 text-sm text-gray-500">Refreshing requests…</p>
+          )}
+          <div className="mt-4 space-y-3">
+            {appRequestPreview.map((request, index) => renderRequestCard(request, index))}
+          </div>
+          <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+            <span>{requestSummaryText}</span>
+            <Link
+              href="/admin/developer-requests"
+              className="inline-flex items-center gap-2 text-sm font-semibold"
+              style={{ color: ADMIN_PRIMARY_COLOR }}
+            >
+              View all requests
+              <FiChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </article>
+
+        <article className="rounded-2xl border p-5 shadow-sm" style={ADMIN_SURFACE_STYLE}>
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-widest" style={{ color: ADMIN_PRIMARY_COLOR }}>API key rotations</p>
+              <h2 className="text-xl font-semibold text-gray-900">Security requests</h2>
+            </div>
+            <button
+              type="button"
+              onClick={handleRefreshRequests}
+              disabled={requestsLoading}
+              title="Refresh rotation requests"
+              className="ml-auto rounded-full border border-gray-200 p-3 text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {requestsLoading ? <FiLoader className="h-5 w-5 animate-spin" /> : <FiRefreshCw className="h-5 w-5" />}
+            </button>
+          </div>
+          <p className="mt-2 text-sm text-gray-600">Quickly respond when developers request fresh credentials.</p>
+          {!requestsError && totalSecurityRequests === 0 && !requestsLoading && (
+            <p className="mt-4 text-sm text-gray-500">No rotation requests yet.</p>
+          )}
+          {requestsLoading && totalSecurityRequests === 0 && (
+            <p className="mt-4 text-sm text-gray-500">Refreshing requests…</p>
+          )}
+          <div className="mt-4 space-y-3">
+            {apiKeyRequestPreview.map((request, index) => renderRequestCard(request, index))}
+          </div>
+          <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+            <span>{securitySummaryText}</span>
+            <Link
+              href="/admin/security-requests"
+              className="inline-flex items-center gap-2 text-sm font-semibold"
+              style={{ color: ADMIN_PRIMARY_COLOR }}
+            >
+              View all requests
+              <FiChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </article>
+      </section>
+    </div>
+  );
+}

@@ -9,12 +9,21 @@
   align-items: center;
 }
 
+.nav_item_locked {
+  pointer-events: none;
+  cursor: default !important;
+}
+
 .nav_item:active {
   width: 35px;
   height: 35px;
   border: none;
   border-radius: 50%;
   background-color: #d0d0d086;
+}
+
+.nav_item_locked:active {
+  background-color: transparent;
 }
 
 .badge_dot {

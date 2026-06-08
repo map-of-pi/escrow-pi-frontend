@@ -6,11 +6,15 @@ import {
   useState,
   SetStateAction,
   ReactNode,
-  useEffect
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
 } from 'react';
+import { usePathname } from 'next/navigation';
 import axiosClient, { setAuthToken } from '@/config/client';
 import { onIncompletePaymentFound } from '@/config/payment';
-import { AuthResult } from '@/config/pi';
+import { AuthResult, InitParams, PiType } from '@/config/pi';
 import { IUser } from '@/types';
 
 interface IAppContextProps {
@@ -27,6 +31,9 @@ interface IAppContextProps {
   isSaveLoading: boolean;
   setIsSaveLoading: React.Dispatch<SetStateAction<boolean>>;
   adsSupported: boolean;
+  piAccessToken: string | null;
+  setPiAccessToken: (token: string | null) => void;
+  authenticateWithPi: (overrideInit?: InitParams) => Promise<AuthResult>;
 }
 
 const initialState: IAppContextProps = {
@@ -42,7 +49,12 @@ const initialState: IAppContextProps = {
   setReload: () => {},
   isSaveLoading: false,
   setIsSaveLoading: () => {},
-  adsSupported: false
+  adsSupported: false,
+  piAccessToken: null,
+  setPiAccessToken: () => {},
+  authenticateWithPi: async () => {
+    throw new Error('authenticateWithPi not initialized');
+  },
 };
 
 export const AppContext = createContext<IAppContextProps>(initialState);
@@ -51,13 +63,85 @@ interface AppContextProviderProps {
   children: ReactNode;
 }
 
+const PI_SDK_SCRIPT_ID = 'escrowpi-shared-pi-sdk';
+let piSdkLoadingPromise: Promise<PiType> | null = null;
+
+const loadPiSdk = (): Promise<PiType> => {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('Pi SDK is only available inside Pi Browser.'));
+  }
+
+  if (window.Pi) {
+    return Promise.resolve(window.Pi);
+  }
+
+  if (piSdkLoadingPromise) {
+    return piSdkLoadingPromise;
+  }
+
+  piSdkLoadingPromise = new Promise((resolve, reject) => {
+    let script = document.getElementById(PI_SDK_SCRIPT_ID) as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement('script');
+      script.id = PI_SDK_SCRIPT_ID;
+      script.src = 'https://sdk.minepi.com/pi-sdk.js';
+      script.async = true;
+      document.head.appendChild(script);
+    }
+
+    const cleanup = () => {
+      script?.removeEventListener('load', handleLoad);
+      script?.removeEventListener('error', handleError);
+      piSdkLoadingPromise = null;
+    };
+
+    const handleLoad = () => {
+      cleanup();
+      if (window.Pi) {
+        resolve(window.Pi);
+      } else {
+        reject(new Error('Pi SDK failed to attach to window.'));
+      }
+    };
+
+    const handleError = () => {
+      cleanup();
+      reject(new Error('Failed to load Pi SDK script.'));
+    };
+
+    script.addEventListener('load', handleLoad);
+    script.addEventListener('error', handleError);
+  });
+
+  return piSdkLoadingPromise;
+};
+
 const AppContextProvider = ({ children }: AppContextProviderProps) => {
+  const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState<IUser | null>(null);
   const [isSigningInUser, setIsSigningInUser] = useState(false);
   const [reload, setReload] = useState(false);
   const [isSaveLoading, setIsSaveLoading] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [adsSupported, setAdsSupported] = useState(false);
+  const [piAccessTokenState, setPiAccessTokenState] = useState<string | null>(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return sessionStorage.getItem('escrowPiAccessToken');
+  });
+
+  const setPiAccessToken = useCallback((token: string | null) => {
+    setPiAccessTokenState(token);
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (token) {
+      sessionStorage.setItem('escrowPiAccessToken', token);
+    } else {
+      sessionStorage.removeItem('escrowPiAccessToken');
+    }
+  }, []);
 
   const showAlert = (message: string) => {
     setAlertMessage(message);
@@ -66,49 +150,83 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
     }, 5000);
   };
 
+  const defaultPiInitConfig = useMemo<InitParams>(() => ({
+    version: '2.0',
+    sandbox: process.env.NODE_ENV !== 'production',
+  }), []);
+
+  const lastPiInitConfigRef = useRef<InitParams | null>(null);
+
+  const initConfigsMatch = useCallback((a: InitParams | null, b: InitParams | null) => {
+    if (!a || !b) {
+      return false;
+    }
+    const aSandbox = typeof a.sandbox === 'boolean' ? a.sandbox : false;
+    const bSandbox = typeof b.sandbox === 'boolean' ? b.sandbox : false;
+    return a.version === b.version && aSandbox === bSandbox;
+  }, []);
+
+  const ensurePiSdkInitialized = useCallback(async (overrideInit?: InitParams) => {
+    const Pi = await loadPiSdk();
+    const desiredConfig = overrideInit ?? defaultPiInitConfig;
+    const shouldInit =
+      !Pi.initialized ||
+      !initConfigsMatch(lastPiInitConfigRef.current, desiredConfig);
+
+    if (shouldInit) {
+      await Promise.resolve(Pi.init(desiredConfig) as unknown);
+      lastPiInitConfigRef.current = desiredConfig;
+    }
+    return Pi;
+  }, [defaultPiInitConfig, initConfigsMatch]);
+
+  const authenticateWithPi = useCallback(async (overrideInit?: InitParams): Promise<AuthResult> => {
+    const Pi = await ensurePiSdkInitialized(overrideInit);
+    const pioneerAuth = await Pi.authenticate(
+      ['username', 'payments', 'wallet_address'],
+      onIncompletePaymentFound
+    );
+    if (!pioneerAuth?.accessToken) {
+      throw new Error('Unable to acquire Pi access token.');
+    }
+    setPiAccessToken(pioneerAuth.accessToken);
+    return pioneerAuth;
+  }, [ensurePiSdkInitialized, setPiAccessToken]);
+
   /* Register User via Pi SDK */
   const registerUser = async () => {
 
     // logger.info('Starting user registration.');
     if (isSigningInUser || currentUser) return
 
-    if (typeof window !== 'undefined' && window.Pi?.initialized) {
-      try {
-        setIsSigningInUser(true);
-        const pioneerAuth: AuthResult = await window.Pi.authenticate([
-          'username', 
-          'payments', 
-          'wallet_address'
-        ], onIncompletePaymentFound);
+    try {
+      setIsSigningInUser(true);
+      const pioneerAuth = await authenticateWithPi();
 
-        // Send accessToken to backend
-        const res = await axiosClient.post(
-          "/users/authenticate", 
-          {}, // empty body
-          {
-            headers: {
-              Authorization: `Bearer ${pioneerAuth.accessToken}`,
-            },
-          }
-        );
-
-        if (res.status === 200) {
-          setAuthToken(res.data?.token);
-          setCurrentUser(res.data.user);
-          // logger.info('User authenticated successfully.');
-        } else {
-          setCurrentUser(null);
-          // logger.error('User authentication failed.');
+      // Send accessToken to backend
+      const res = await axiosClient.post(
+        "/users/authenticate", 
+        {}, // empty body
+        {
+          headers: {
+            Authorization: `Bearer ${pioneerAuth.accessToken}`,
+          },
         }
-      } catch (error) {
-        // logger.error('Error during user registration:', error);
-        console.error('>>> [registerUser] Error during user registration:', error);
-      } finally {
-        setTimeout(() => setIsSigningInUser(false), 2500);
+      );
+
+      if (res.status === 200) {
+        setAuthToken(res.data?.token);
+        setCurrentUser(res.data.user);
+        // logger.info('User authenticated successfully.');
+      } else {
+        setCurrentUser(null);
+        // logger.error('User authentication failed.');
       }
-    } else {
-      // logger.error('PI SDK failed to initialize.');
-      console.error('>>> [registerUser] PI SDK failed to initialize.');
+    } catch (error) {
+      // logger.error('Error during user registration:', error);
+      console.error('>>> [registerUser] Error during user registration:', error);
+    } finally {
+      setTimeout(() => setIsSigningInUser(false), 2500);
     }
   };
 
@@ -136,39 +254,25 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
     }
   };
 
-  const loadPiSdk = (): Promise<typeof window.Pi> => {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://sdk.minepi.com/pi-sdk.js';
-      script.async = true;
-      script.onload = () => {
-        resolve(window.Pi);
-      };
-      script.onerror = () => {
-        reject(new Error('Failed to load Pi SDK'));
-      };
-      document.head.appendChild(script);
-    });
-  };
-
   useEffect(() => {
     if (isSigningInUser || currentUser) return;
-    
-    const nodeEnv = process.env.NODE_ENV as 'development' | 'staging';
+
+    const isProviderCheckoutRoute =
+      pathname?.startsWith('/provider/pay') || pathname?.startsWith('/provider/callback');
+    if (isProviderCheckoutRoute) {
+      return;
+    }
 
     // attempt to load and initialize Pi SDK in parallel
-    loadPiSdk()
-      .then(Pi => {
-        Pi.init({ version: '2.0', sandbox: nodeEnv === 'development' || nodeEnv === 'staging' });
-        return Pi.nativeFeaturesList();
-      })
+    ensurePiSdkInitialized()
+      .then(Pi => Pi.nativeFeaturesList())
       .then(features => {
         setAdsSupported(features.includes("ad_network"));
       })
-      .catch(err => console.error('>>> [loadPiSdk] Pi SDK load/init error:', err));
+      .catch(err => console.error('>>> [ensurePiSdkInitialized] Pi SDK load/init error:', err));
 
     autoLoginUser();
-  }, [isSigningInUser]);
+  }, [isSigningInUser, pathname, currentUser, ensurePiSdkInitialized]);
 
   return (
     <AppContext.Provider 
@@ -185,7 +289,10 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
         setAlertMessage, 
         isSaveLoading, 
         setIsSaveLoading, 
-        adsSupported
+        adsSupported,
+        piAccessToken: piAccessTokenState,
+        setPiAccessToken,
+        authenticateWithPi
       }}
     >
       {children}
