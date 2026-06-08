@@ -33,13 +33,7 @@ import {
   ADMIN_SURFACE_STYLE,
 } from './theme';
 
-const PI_SDK_SCRIPT_ID = 'escrowpi-admin-pi-sdk';
-
 type PiAuthState = 'idle' | 'authenticating' | 'ready' | 'error';
-
-type PiWindow = Window & {
-  Pi?: any;
-};
 
 const getDeveloperAppStatusStyle = (status?: string) => {
   const normalized = (status ?? 'active').toLowerCase();
@@ -64,36 +58,13 @@ const describeError = (err: any) => {
 };
 
 
-const loadPiSdk = (): Promise<any> => {
-  if (typeof window === 'undefined') {
-    return Promise.reject(new Error('Pi SDK is only available inside Pi Browser.'));
-  }
-  const existing = (window as PiWindow).Pi;
-  if (existing) {
-    return Promise.resolve(existing);
-  }
-
-  const scriptEl = document.getElementById(PI_SDK_SCRIPT_ID) as HTMLScriptElement | null;
-  if (scriptEl) {
-    return new Promise((resolve, reject) => {
-      scriptEl.addEventListener('load', () => resolve((window as PiWindow).Pi));
-      scriptEl.addEventListener('error', () => reject(new Error('Failed to load Pi SDK script.')));
-    });
-  }
-
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.id = PI_SDK_SCRIPT_ID;
-    script.src = 'https://sdk.minepi.com/pi-sdk.js';
-    script.async = true;
-    script.onload = () => resolve((window as PiWindow).Pi);
-    script.onerror = () => reject(new Error('Failed to load Pi SDK script.'));
-    document.head.appendChild(script);
-  });
-};
-
 export default function AdminConsolePage() {
-  const { currentUser, piAccessToken: contextPiToken, setPiAccessToken } = useContext(AppContext);
+  const {
+    currentUser,
+    piAccessToken: contextPiToken,
+    setPiAccessToken,
+    authenticateWithPi: contextAuthenticateWithPi,
+  } = useContext(AppContext);
   const [piToken, setPiToken] = useState<string | null>(contextPiToken ?? null);
   const [piAuthState, setPiAuthState] = useState<PiAuthState>(contextPiToken ? 'ready' : 'idle');
   const [piAuthError, setPiAuthError] = useState<string | null>(null);
@@ -117,17 +88,7 @@ export default function AdminConsolePage() {
     setPiAuthState('authenticating');
     setPiAuthError(null);
     try {
-      const Pi = await loadPiSdk();
-      if (!Pi) {
-        throw new Error('Pi SDK not detected. Open this page inside Pi Browser.');
-      }
-      if (!Pi.initialized) {
-        Pi.init({ version: '2.0', sandbox: process.env.NODE_ENV !== 'production' });
-      }
-      const pioneerAuth = await Pi.authenticate(['username', 'payments', 'wallet_address'], onIncompletePaymentFound);
-      if (!pioneerAuth?.accessToken) {
-        throw new Error('Unable to acquire Pi access token.');
-      }
+      const pioneerAuth = await contextAuthenticateWithPi();
       setPiToken(pioneerAuth.accessToken);
       setPiAccessToken(pioneerAuth.accessToken);
       setPiAuthState('ready');
@@ -140,7 +101,7 @@ export default function AdminConsolePage() {
       toast.error(message);
       throw err;
     }
-  }, [setPiAccessToken]);
+  }, [contextAuthenticateWithPi, setPiAccessToken]);
 
   const ensurePiToken = useCallback(async () => {
     if (piToken) {

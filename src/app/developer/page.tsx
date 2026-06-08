@@ -6,7 +6,6 @@ import { toast } from 'react-toastify';
 import { FiChevronDown, FiChevronRight, FiExternalLink, FiLoader, FiRefreshCw } from 'react-icons/fi';
 import { MdAppRegistration } from 'react-icons/md';
 
-import { onIncompletePaymentFound } from '@/config/payment';
 import { AppContext } from '@/context/AppContextProvider';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import {
@@ -44,16 +43,11 @@ type CredentialRevealState = {
   revealedAt: string;
 };
 
-type PiWindow = Window & {
-  Pi?: any;
-};
-
 type AppInsight = {
   app: DeveloperAppRecord;
   lastActivityTs: number;
 };
 
-const PI_SDK_SCRIPT_ID = 'escrowpi-dev-portal-pi-sdk';
 const THIRTY_DAYS_MS = 1000 * 60 * 60 * 24 * 30;
 
 const describeError = (err: any) => {
@@ -73,34 +67,6 @@ const parseListInput = (value: string) =>
 const EMAIL_REGEX_PATTERN = "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$";
 const EMAIL_REGEX = new RegExp(EMAIL_REGEX_PATTERN);
 
-const loadPiSdk = (): Promise<any> => {
-  if (typeof window === 'undefined') {
-    return Promise.reject(new Error('Pi SDK is only available inside Pi Browser.'));
-  }
-  const existing = (window as PiWindow).Pi;
-  if (existing) {
-    return Promise.resolve(existing);
-  }
-
-  const scriptEl = document.getElementById(PI_SDK_SCRIPT_ID) as HTMLScriptElement | null;
-  if (scriptEl) {
-    return new Promise((resolve, reject) => {
-      scriptEl.addEventListener('load', () => resolve((window as PiWindow).Pi));
-      scriptEl.addEventListener('error', () => reject(new Error('Failed to load Pi SDK script.')));
-    });
-  }
-
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.id = PI_SDK_SCRIPT_ID;
-    script.src = 'https://sdk.minepi.com/pi-sdk.js';
-    script.async = true;
-    script.onload = () => resolve((window as PiWindow).Pi);
-    script.onerror = () => reject(new Error('Failed to load Pi SDK script.'));
-    document.head.appendChild(script);
-  });
-};
-
 const timestampFromDate = (value: string | null | undefined) => {
   if (!value) return 0;
   const ts = new Date(value).getTime();
@@ -115,7 +81,12 @@ const normalizePiSdkError = (message: string) => {
 };
 
 export default function DeveloperPortal() {
-  const { currentUser, piAccessToken: contextPiToken, setPiAccessToken } = useContext(AppContext);
+  const {
+    currentUser,
+    piAccessToken: contextPiToken,
+    setPiAccessToken,
+    authenticateWithPi: contextAuthenticateWithPi,
+  } = useContext(AppContext);
 
   const [piToken, setPiToken] = useState<string | null>(contextPiToken ?? null);
   const [piAuthState, setPiAuthState] = useState<PiAuthState>(contextPiToken ? 'ready' : 'idle');
@@ -152,17 +123,7 @@ export default function DeveloperPortal() {
     setPiAuthState('authenticating');
     setPiAuthError(null);
     try {
-      const Pi = await loadPiSdk();
-      if (!Pi) {
-        throw new Error('Pi SDK not detected. Open this page inside Pi Browser.');
-      }
-      if (!Pi.initialized) {
-        Pi.init({ version: '2.0', sandbox: process.env.NODE_ENV !== 'production' });
-      }
-      const pioneerAuth = await Pi.authenticate(['username', 'payments', 'wallet_address'], onIncompletePaymentFound);
-      if (!pioneerAuth?.accessToken) {
-        throw new Error('Unable to acquire Pi access token.');
-      }
+      const pioneerAuth = await contextAuthenticateWithPi();
       setPiToken(pioneerAuth.accessToken);
       setPiAccessToken(pioneerAuth.accessToken);
       setPiAuthState('ready');
@@ -175,7 +136,7 @@ export default function DeveloperPortal() {
       toast.error(message);
       throw err;
     }
-  }, []);
+  }, [contextAuthenticateWithPi, setPiAccessToken]);
 
   const finalizeHideCredential = useCallback((requestId: string) => {
     if (!requestId) {

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 
 import axiosClient, { setAuthToken } from "@/config/client";
 import { onIncompletePaymentFound } from "@/config/payment";
+import { AppContext } from "@/context/AppContextProvider";
 import {
   ProviderContextResponse,
   ProviderRedirectParams,
@@ -125,7 +126,12 @@ type PiFlowResult = {
 const ProviderPayPage = () => {
   const searchParams = useSearchParams();
   const redirectPayload = useProviderPayload();
-  const [piToken, setPiToken] = useState<string | null>(null);
+  const {
+    piAccessToken: contextPiToken,
+    setPiAccessToken,
+    authenticateWithPi: contextAuthenticateWithPi,
+  } = useContext(AppContext);
+  const [piToken, setPiToken] = useState<string | null>(contextPiToken ?? null);
   const [context, setContext] = useState<ProviderContextResponse | null>(null);
   const [phase, setPhase] = useState<"initial" | "auth" | "loading" | "ready" | "error">("initial");
   const [error, setError] = useState<string | null>(null);
@@ -181,17 +187,50 @@ const ProviderPayPage = () => {
 
   const authenticateWithPi = useCallback(async (): Promise<string> => {
     setPhase("auth");
-    const Pi = await ensurePiSdk();
-    const pioneerAuth = await Pi.authenticate(
-      ["username", "payments", "wallet_address"],
-      onIncompletePaymentFound
-    );
+    const pioneerAuth = await contextAuthenticateWithPi(piInitConfig);
     if (!pioneerAuth?.accessToken) {
       throw new Error("Unable to acquire Pi access token");
     }
     setPiToken(pioneerAuth.accessToken);
+    setPiAccessToken(pioneerAuth.accessToken);
     return pioneerAuth.accessToken;
-  }, [ensurePiSdk]);
+  }, [contextAuthenticateWithPi, piInitConfig, setPiAccessToken]);
+
+  useEffect(() => {
+    if (contextPiToken && contextPiToken !== piToken) {
+      setPiToken(contextPiToken);
+    }
+  }, [contextPiToken, piToken]);
+
+  const returnToMerchantUrl = useMemo(() => {
+    const baseUrl = context?.providerPayload?.returnUrl ?? redirectPayload?.returnUrl;
+    if (!baseUrl) {
+      return null;
+    }
+    try {
+      const url = new URL(baseUrl);
+      const signature = context?.providerPayload?.signature ?? redirectPayload?.signature;
+      const stateParam = context?.providerPayload?.state ?? redirectPayload?.state ?? undefined;
+      if (signature) {
+        url.searchParams.set("signature", signature);
+      }
+      if (stateParam) {
+        url.searchParams.set("state", stateParam);
+      }
+      if (redirectPayload?.invocationId) {
+        url.searchParams.set("invocationId", redirectPayload.invocationId);
+      }
+      if (redirectPayload?.developerAppId) {
+        url.searchParams.set("developerAppId", redirectPayload.developerAppId);
+      }
+      if (activeOrderNo) {
+        url.searchParams.set("orderNo", activeOrderNo);
+      }
+      return url.toString();
+    } catch {
+      return baseUrl;
+    }
+  }, [context, redirectPayload, activeOrderNo]);
 
   useEffect(() => {
     if (!redirectPayload) {
@@ -516,11 +555,11 @@ const ProviderPayPage = () => {
             >
               Retry
             </button>
-            {redirectPayload?.returnUrl && (
+            {returnToMerchantUrl && (
               <button
                 type="button"
                 className="rounded-full border border-red-200 px-4 py-2 text-xs font-semibold text-red-700"
-                onClick={() => window.location.assign(redirectPayload.returnUrl)}
+                onClick={() => window.location.assign(returnToMerchantUrl)}
               >
                 Back to merchant
               </button>
