@@ -16,34 +16,36 @@ export const payWithPi = async (paymentData: PaymentDataType, onComplete:any, on
 
   const onReadyForServerCompletion = (paymentId: string, txid: string) => {
     axiosClient.post('/payments/complete', { paymentId, txid }, config).then((res) => {
-      console.log('Payment completed successfully: ', res.data);
-      onComplete(res.data);
-    }).catch((error) => {
-      console.error('Error completing payment: ', error);
-      error(error);
-    });
-  }
-
-  const onCancel = (paymentId: string) => {
-    axiosClient.post('/payments/cancelled-payment', { paymentId }, config).then((res)=>{
+      console.log('Payment completed successfully: ', res.data); 
       onComplete(res.data);
     }).catch((error) => {
       console.error('Error completing payment: ', error);
       onFail(error);
     });
-    
-    return 
+  }
+
+  const onCancel = (paymentId: string) => {
+    axiosClient
+      .post('/payments/cancelled-payment', { paymentId }, config)
+      .catch((error) => {
+        console.error('Error recording cancelled payment: ', error);
+      })
+      .finally(() => {
+        onFail(new Error('Payment cancelled by user.'));
+      });
+    return;
   }
 
   const onError = (error: Error, paymentDTO?: PaymentDTO) => {
-    if (paymentDTO) {
-      axiosClient.post('/payments/error', { paymentDTO, error }, config).then((res)=>{
-        onComplete(res.data);
-      }).catch((submitError) => {
-        console.error('Error completing payment: ', submitError);
-        onFail(submitError);
-      });
-    }
+    const submission = paymentDTO
+      ? axiosClient.post('/payments/error', { paymentDTO, error }, config).catch((submitError) => {
+          console.error('Error recording payment failure: ', submitError);
+        })
+      : Promise.resolve();
+
+    submission.finally(() => {
+      onFail(error);
+    });
   }
 
   const callbacks = {    

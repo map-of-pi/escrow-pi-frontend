@@ -3,7 +3,23 @@ export interface IUser {
   pi_username: string;
   user_name: string;
   isAdmin?: boolean;
+  wallet_address?: string | null;
+  isActive?: boolean;
 };
+
+export type ActivationInitiationPayload = {
+  amount: number;
+  memo: string;
+  metadata: Record<string, any>;
+};
+
+export interface IUserLookup {
+  pi_uid: string;
+  pi_username: string;
+  user_name: string;
+  isActive: boolean;
+  wallet_address: string | null;
+}
 
 export type PaymentDataType = {
   amount: number;

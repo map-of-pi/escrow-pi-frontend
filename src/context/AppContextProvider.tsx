@@ -186,6 +186,7 @@ const AppContextProvider = ({ children }: AppContextProviderProps) => {
       ['username', 'payments', 'wallet_address'],
       onIncompletePaymentFound
     );
+    console.log(`Pioneer auth: ${JSON.stringify(pioneerAuth)}`);
     if (!pioneerAuth?.accessToken) {
       throw new Error('Unable to acquire Pi access token.');
     }

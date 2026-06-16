@@ -292,6 +292,13 @@ export default function Navbar() {
             <div>
               <div className="mb-3 text-center">
                 <h2 className="text-lg font-semibold">{currentUser?.pi_username || 'Menu'}</h2>
+                {currentUser && (
+                  <span
+                    className={`mt-2 inline-flex items-center justify-center rounded-full px-3 py-0.5 text-xs font-semibold ${currentUser.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
+                  >
+                    {currentUser.isActive ? 'Active' : 'Activation required'}
+                  </span>
+                )}
               </div>
 
               <div className="mb-3">
