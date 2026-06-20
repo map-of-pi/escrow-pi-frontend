@@ -22,6 +22,9 @@ const describeError = (err: any): string => {
 };
 
 const normalizePiUsername = (value: string): string => value.trim();
+const normalizeUsernameForComparison = (value: string): string => {
+  return normalizePiUsername(value).replace(/^@+/, '').toLowerCase();
+};
 
 type CounterpartyLookupState =
   | { state: 'idle'; user: null; message?: string }
@@ -84,11 +87,26 @@ export default function HomePage() {
   const [activationSubmitting, setActivationSubmitting] = useState(false);
   const [counterpartyLookup, setCounterpartyLookup] = useState<CounterpartyLookupState>({ state: 'idle', user: null });
   const counterpartyLookupTimeout = useRef<number | null>(null);
-  const activationToastShownRef = useRef<boolean>(Boolean(currentUser?.isActive));
+  const lastKnownActivationStatusRef = useRef<boolean | null>(currentUser?.isActive ?? null);
   const normalizedCounterparty = useMemo(() => normalizePiUsername(counterparty).replace(/^@/, ''), [counterparty]);
+  const normalizedCounterpartyForComparison = useMemo(
+    () => normalizeUsernameForComparison(counterparty),
+    [counterparty]
+  );
+  const normalizedCurrentUserUsername = useMemo(
+    () => normalizeUsernameForComparison(currentUser?.pi_username ?? ''),
+    [currentUser?.pi_username]
+  );
   const counterpartyStatus = useMemo<CounterpartyStatusDescriptor>(() => {
     if (!normalizedCounterparty) {
       return { text: 'Enter an active payer/payee Pi username', tone: 'muted' };
+    }
+    if (
+      normalizedCounterpartyForComparison &&
+      normalizedCurrentUserUsername &&
+      normalizedCounterpartyForComparison === normalizedCurrentUserUsername
+    ) {
+      return { text: 'You cannot create an EscrowPi transaction with yourself.', tone: 'warning' };
     }
     switch (counterpartyLookup.state) {
       case 'checking':
@@ -104,7 +122,7 @@ export default function HomePage() {
       default:
         return { text: 'Enter an active payer/payee Pi username', tone: 'muted' };
     }
-  }, [normalizedCounterparty, counterpartyLookup]);
+  }, [normalizedCounterparty, counterpartyLookup, normalizedCounterpartyForComparison, normalizedCurrentUserUsername]);
 
   const counterpartyStatusIcon = useMemo(() => {
     switch (counterpartyStatus.tone) {
@@ -154,15 +172,14 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    const active = Boolean(currentUser?.isActive);
-    if (!activationToastShownRef.current && active) {
+    const previousStatus = lastKnownActivationStatusRef.current;
+    const currentStatus = currentUser?.isActive ?? null;
+
+    if (previousStatus === false && currentStatus === true) {
       toast.success('Account activation completed. You can now use EscrowPi.');
-      activationToastShownRef.current = true;
-      return;
     }
-    if (!active) {
-      activationToastShownRef.current = false;
-    }
+
+    lastKnownActivationStatusRef.current = currentStatus;
   }, [currentUser?.isActive]);
 
   // Check for uncleared notifications and show dialog once per session
@@ -297,6 +314,15 @@ export default function HomePage() {
     const normalizedInput = normalizePiUsername(counterparty);
     if (!normalizedInput) {
       toast.error(orderType === OrderTypeEnum.Send ? 'Please enter Payee Pioneer Name' : 'Please enter Payer Pioneer Name');
+      return false;
+    }
+
+    if (
+      normalizedCounterpartyForComparison &&
+      normalizedCurrentUserUsername &&
+      normalizedCounterpartyForComparison === normalizedCurrentUserUsername
+    ) {
+      toast.error('You cannot create an EscrowPi transaction with your own Pioneer name. Please choose a different payee/payer.');
       return false;
     }
 
