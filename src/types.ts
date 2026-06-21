@@ -38,12 +38,14 @@ export type IOrder = {
   sender_username: string;
   receiver_username: string;
   amount: number;
+  base_amount?: number | null;
   order_no: string;
   status: string;
   createdAt: Date;
   updatedAt: Date;
   developer_app_name?: string;
   developer_fee?: {
+    enabled?: boolean | null;
     developer_app_id?: string | null;
     developer_pi_uid?: string | null;
     percent?: number | null;

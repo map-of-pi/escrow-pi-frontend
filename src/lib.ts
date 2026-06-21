@@ -1,5 +1,119 @@
 import { IOrder, IComment } from "./types";
 
+const PI_DECIMAL_PLACES = 8;
+const COMPLETION_STAKE_PERCENT = 0.1;
+const COMPLETION_STAKE_MIN = 1;
+const ESCROW_FEE_PERCENT = 0.01;
+const ESCROW_FEE_MIN = 0.1;
+const DEFAULT_NETWORK_FEE = 0.02;
+const NETWORK_FEE_WITH_DEVELOPER = 0.03;
+
+const roundPi = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Number(value.toFixed(PI_DECIMAL_PLACES));
+};
+
+const deriveBaseFromTotal = (params: {
+  totalAmount: number;
+  networkFee: number;
+  developerEnabled: boolean;
+  developerPercent?: number;
+}): number => {
+  const { totalAmount, networkFee, developerEnabled, developerPercent } = params;
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    return 0;
+  }
+
+  let low = 0;
+  let high = Math.max(totalAmount, 1);
+
+  for (let i = 0; i < 60; i++) {
+    const mid = (low + high) / 2;
+    const completionStake = Math.max(
+      mid * COMPLETION_STAKE_PERCENT,
+      COMPLETION_STAKE_MIN
+    );
+    const escrowFee = Math.max(mid * ESCROW_FEE_PERCENT, ESCROW_FEE_MIN);
+    const developerFee =
+      developerEnabled && typeof developerPercent === "number"
+        ? (mid * developerPercent) / 100
+        : 0;
+    const candidateTotal =
+      mid + completionStake + escrowFee + developerFee + networkFee;
+
+    if (candidateTotal > totalAmount) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+
+  return roundPi(low);
+};
+
+export type TxFeeBreakdown = {
+  baseAmount: number;
+  completionStake: number;
+  networkFee: number;
+  escrowFee: number;
+  developerFee: number;
+  total: number;
+};
+
+export const computeOrderBreakdown = (order: IOrder): TxFeeBreakdown => {
+  const developerPercent =
+    typeof order?.developer_fee?.percent === "number"
+      ? order.developer_fee.percent
+      : undefined;
+  const developerEnabled = Boolean(
+    order?.developer_fee?.enabled && developerPercent
+  );
+  const networkFee = developerEnabled
+    ? NETWORK_FEE_WITH_DEVELOPER
+    : DEFAULT_NETWORK_FEE;
+
+  const totalAmount = Number(order?.amount ?? 0);
+
+  let baseAmount: number;
+  if (Number.isFinite(totalAmount) && totalAmount > 0) {
+    baseAmount = deriveBaseFromTotal({
+      totalAmount,
+      networkFee,
+      developerEnabled,
+      developerPercent,
+    });
+  } else if (typeof order?.base_amount === "number" && order.base_amount > 0) {
+    baseAmount = roundPi(order.base_amount);
+  } else {
+    baseAmount = 0;
+  }
+
+  const completionStake = roundPi(
+    Math.max(baseAmount * COMPLETION_STAKE_PERCENT, COMPLETION_STAKE_MIN)
+  );
+  const escrowFee = roundPi(
+    Math.max(baseAmount * ESCROW_FEE_PERCENT, ESCROW_FEE_MIN)
+  );
+  const developerFee =
+    developerEnabled && typeof developerPercent === "number"
+      ? roundPi((baseAmount * developerPercent) / 100)
+      : 0;
+  const total = roundPi(
+    baseAmount + completionStake + escrowFee + networkFee + developerFee
+  );
+
+  return {
+    baseAmount,
+    completionStake,
+    networkFee,
+    escrowFee,
+    developerFee,
+    total,
+  };
+};
+
 export type TxStatus =
   | 'initiated'
   | 'requested'
@@ -23,6 +137,7 @@ export type TxItem = {
   auditLog?: string;
   needsPayerResponse?: boolean; // show popup when true and this is a receive where I am payer
   developerAppName: string;
+  breakdown: TxFeeBreakdown;
 };
 
 export const statusClasses: Record<TxStatus, string> = {
@@ -78,6 +193,7 @@ export const mapOrdersToTxItems = (orders: IOrder[], authUsername: string): TxIt
       status: order.status as TxStatus,
       date: new Date(order.createdAt).toISOString(),
       developerAppName,
+      breakdown: computeOrderBreakdown(order),
     };
   });
 };

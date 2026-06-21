@@ -87,28 +87,6 @@ export default function TxDetailsPage() {
     return s;
   };
 
-  // Given total (top figure), derive base and fees using the same policy as the homepage
-  const deriveBreakdown = (total: number) => {
-    // Known constants
-    const network = 0.02;
-    // Find base such that total ≈ base + stake + network + escrow
-    // stake = max(0.1*base, 1)
-    // escrow = max(0.01*base, 0.1)
-    let lo = 0, hi = Math.max(total, 1);
-    for (let i = 0; i < 50; i++) {
-      const mid = (lo + hi) / 2;
-      const stake = Math.max(0.1 * mid, 1);
-      const escrow = Math.max(0.01 * mid, 0.1);
-      const t = mid + stake + network + escrow;
-      if (t > total) hi = mid; else lo = mid;
-    }
-    const base = lo;
-    const completionStake = Math.max(0.1 * base, 1);
-    const escrowFee = Math.max(0.01 * base, 0.1);
-    const recomputedTotal = base + completionStake + network + escrowFee;
-    return { base, completionStake, networkFees: network, escrowFee, total: recomputedTotal };
-  };
-
   useEffect(() => {
     const loadOrder = async () => {
       // await a2uTrigger()
@@ -383,7 +361,7 @@ export default function TxDetailsPage() {
         <Modal
           open={showCancel}
           onClose={() => setShowCancel(false)}
-          title={(() => { const b = deriveBreakdown(tx.amount); const networkRefund = 0.01; const refundTotal = b.base + b.completionStake + networkRefund; return (
+          title={(() => { const b = tx?.breakdown; if (!b) return null; const networkRefund = 0.01; const refundTotal = b.baseAmount + b.completionStake + networkRefund; return (
             <div className="text-center space-y-1">
               <div className="font-semibold">Confirm cancel transaction and get refund</div>
               <div className="text-2xl font-bold">{fmt(refundTotal)} pi</div>
@@ -391,12 +369,17 @@ export default function TxDetailsPage() {
           ); })()}
         >
           <div className="space-y-3 text-sm">
-            {(() => { const b = deriveBreakdown(tx.amount); const networkRefund = 0.01; const networkNotRefunded = 0.01; const refundTotal = b.base + b.completionStake + networkRefund; return (
+            {(() => { const b = tx?.breakdown; if (!b) return null; const networkRefund = 0.01; const networkNotRefunded = Math.max(b.networkFee - networkRefund, 0); const refundTotal = b.baseAmount + b.completionStake + networkRefund; const escrowNotRefunded = b.escrowFee; const developerFee = b.developerFee; return (
               <div className="space-y-2 rounded-lg p-3">
-                <div className="flex justify-between"><span>Payer amount (refunded):</span><span>{fmt(b.base)} pi</span></div>
+                <div className="flex justify-between"><span>Payer amount (refunded):</span><span>{fmt(b.baseAmount)} pi</span></div>
                 <div className="flex justify-between"><span>Transaction Stake (refunded):</span><span>{fmt(b.completionStake)} pi</span></div>
                 <div className="flex justify-between"><span>Pi Network gas fees (refunded):</span><span>{fmt(networkRefund)} pi</span></div>
-                <div className="flex justify-between font-semibold border-t pt-2"><span>Total refunded:</span><span>{fmt(refundTotal)} pi</span></div>
+                <div className="flex justify-between"><span>Pi Network gas fees (not refunded):</span><span>{fmt(networkNotRefunded)} pi</span></div>
+                <div className="flex justify-between"><span>Escrow fee (not refunded):</span><span>{fmt(escrowNotRefunded)} pi</span></div>
+                {developerFee > 0 && (
+                  <div className="flex justify-between"><span>Developer fee (refunded to developer):</span><span>{fmt(developerFee)} pi</span></div>
+                )}
+                <div className="flex justify-between font-semibold border-t pt-2"><span>Total refund (to payer):</span><span>{fmt(refundTotal)} pi</span></div>
               </div>
             ); })()}
             <div className="pt-2">
@@ -423,7 +406,7 @@ export default function TxDetailsPage() {
             onClose={() => setShowSendProposal(false)}
             title={<div className="font-semibold text-center">You propose dispute resolution refund {refundPercent}%</div>}
           >
-            {(() => { const b = deriveBreakdown(tx.amount); const refund = (b.base * refundPercent) / 100; const payeeGets = b.base - refund; return (
+            {(() => { const b = tx?.breakdown; if (!b) return null; const refund = (b.baseAmount * refundPercent) / 100; const payeeGets = b.baseAmount - refund; return (
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(refund)} pi</span></div>
                 <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(payeeGets)} pi</span></div>
@@ -488,7 +471,7 @@ export default function TxDetailsPage() {
             onClose={() => setShowAcceptProposal(false)}
             title={<div className="font-semibold text-center">You accept dispute resolution refund {lastProposedPercent ?? refundPercent}%</div>}
           >
-            {(() => { const b = deriveBreakdown(tx.amount); const percent = (lastProposedPercent ?? refundPercent); const refund = (b.base * percent) / 100; const payeeGets = b.base - refund; return (
+            {(() => { const b = tx?.breakdown; if (!b) return null; const percent = (lastProposedPercent ?? refundPercent); const refund = (b.baseAmount * percent) / 100; const payeeGets = b.baseAmount - refund; return (
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span>Payer gets refund:</span><span>{fmt(refund)} pi</span></div>
                 <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(payeeGets)} pi</span></div>
@@ -561,12 +544,15 @@ export default function TxDetailsPage() {
         >
           <div className="space-y-3 text-sm">
             <div className="text-center text-gray-700">This will mark transaction status as {statusLabel['released']}.</div>
-            {(() => { const b = deriveBreakdown(tx.amount); return (
+            {(() => { const b = tx?.breakdown; if (!b) return null; return (
               <div className="space-y-2 rounded-lg border border-black p-3">
-                <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(b.base)} pi</span></div>
+                <div className="flex justify-between"><span>Payee gets:</span><span>{fmt(b.baseAmount)} pi</span></div>
                 <div className="flex justify-between"><span>Stake refunded to Payer:</span><span>{fmt(b.completionStake)} pi</span></div>
-                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
+                <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFee)} pi</span></div>
                 <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+                {b.developerFee > 0 && (
+                  <div className="flex justify-between"><span>Developer fee:</span><span>{fmt(b.developerFee)} pi</span></div>
+                )}
                 <div className="flex justify-between font-semibold"><span>Total:</span><span>{fmt(b.total)} pi</span></div>
               </div>
             ); })()}
@@ -645,13 +631,16 @@ export default function TxDetailsPage() {
           </svg>
         </summary>
         <div className="mt-3 md:mt-2 text-sm">
-          {(() => { const b = deriveBreakdown(tx.amount); const refundNote = tx.myRole === 'payer' ? '(refunded to you at end)' : '(refunded to the payer at end)'; const getLabel = tx.myRole === 'payee' ? 'You get:' : 'Payee gets:'; return (
+          {(() => { const b = tx?.breakdown; if (!b) return null; const refundNote = tx.myRole === 'payer' ? '(refunded to you at end)' : '(refunded to the payer at end)'; const getLabel = tx.myRole === 'payee' ? 'You get:' : 'Payee gets:'; return (
             <div className="space-y-2 rounded-lg border border-black p-3">
-              <div className="flex justify-between"><span>{getLabel}</span><span>{fmt(b.base)} pi</span></div>
+              <div className="flex justify-between"><span>{getLabel}</span><span>{fmt(b.baseAmount)} pi</span></div>
               <div className="flex justify-between"><span>Transaction completion stake:</span><span>{fmt(b.completionStake)} pi</span></div>
               <div className="text-[11px] text-gray-600">{refundNote}</div>
-              <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
+              <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFee)} pi</span></div>
               <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+              {b.developerFee > 0 && (
+                <div className="flex justify-between"><span>Developer fee:</span><span>{fmt(b.developerFee)} pi</span></div>
+              )}
               <div className="flex justify-between font-semibold"><span>Total:</span><span>{fmt(b.total)} pi</span></div>
             </div>
           ); })()}
@@ -1083,17 +1072,20 @@ export default function TxDetailsPage() {
           title={
             <div className="text-center space-y-1">
               <div className="font-semibold">Confirm you accept the request to pay pi</div>
-              <div className="text-2xl font-bold">{fmt(deriveBreakdown(tx.amount).total)} pi</div>
+              <div className="text-2xl font-bold">{fmt(tx?.breakdown?.total ?? tx.amount)} pi</div>
             </div>
           }
         >
-          {(() => { const b = deriveBreakdown(tx.amount); return (
+          {(() => { const b = tx?.breakdown; if (!b) return null; return (
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span>They get:</span><span>{fmt(b.base)} pi</span></div>
+            <div className="flex justify-between"><span>They get:</span><span>{fmt(b.baseAmount)} pi</span></div>
             <div className="flex justify-between"><span>Transaction completion stake:</span><span>{fmt(b.completionStake)} pi</span></div>
             <div className="text-[11px] text-gray-600">(refunded to you at end)</div>
-            <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFees)} pi</span></div>
+            <div className="flex justify-between"><span>Pi Network gas fees:</span><span>{fmt(b.networkFee)} pi</span></div>
             <div className="flex justify-between"><span>EscrowPi fee:</span><span>{fmt(b.escrowFee)} pi</span></div>
+            {b.developerFee > 0 && (
+              <div className="flex justify-between"><span>Developer fee:</span><span>{fmt(b.developerFee)} pi</span></div>
+            )}
             <div className="pt-2">
               <button
                 className="w-full py-2 rounded-lg text-sm font-semibold"
