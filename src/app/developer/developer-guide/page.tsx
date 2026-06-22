@@ -22,16 +22,40 @@ const tocItems = [
 
 const apiEndpoints = [
   {
+    method: 'POST',
+    path: '/api/v1/developer/validation/caller',
+    description: 'Confirms the authenticated pioneer is registered + activated inside EscrowPi.',
+    notes: ['Run immediately after Pi.authenticate', 'HTTP 403 returns errorCode current_user_not_activated or pi_user_not_onboarded'],
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/developer/validation/receiver',
+    description: 'Validates a receiver Pi username, returning profile data + activation status.',
+    notes: ['Validates counterparty username. Call before enabling your pay button.', 'Expect errorCode receiver_not_activated when the counterparty still needs activation'],
+  },
+  {
     method: 'GET',
     path: '/api/v1/developer/buttons/pay',
     description: 'Issues a short-lived invocation token and button metadata.',
-    notes: ['Requires Pi access token + EscrowPi headers', 'Call from your backend only'],
+    notes: ['Requires Pi access token + EscrowPi headers', 'Returns 403 if caller/receiver fail activation checks'],
   },
   {
     method: 'GET',
     path: '/api/v1/developer/buttons/pay/redirect',
     description: 'Builds the signed provider redirect URL for a specific invocation.',
-    notes: ['Valid returnUrl origin is mandatory', 'Use the invocationId from the previous step'],
+    notes: ['Valid returnUrl origin is mandatory', 'Passing recipientPiUsername re-validates the counterparty before issuing the redirect'],
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/developer/provider/pay/context',
+    description: 'Hydrates the hosted checkout flow with invocation, fee, and payer context.',
+    notes: ['Called by escrow-pi-frontend inside Pi Browser (FYI for developers)', 'Requires the signed payload + Pi auth; no action required on your backend'],
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/developer/provider/pay/submit',
+    description: 'Finalizes checkout, creates the order, and returns the signed callback payload.',
+    notes: ['Called only from escrow-pi-frontend after the pioneer confirms', 'Developers only need to handle the redirect payload returned to their app'],
   },
   {
     method: 'POST',
@@ -48,18 +72,23 @@ const apiEndpoints = [
   {
     method: 'GET',
     path: '/api/v1/developer/fees',
-    description: 'Provides the current fee configuration EscrowPi applies to your app.',
-    notes: ['Great for displaying fees to users before checkout', 'Requires EscrowPi developer context'],
+    description: 'Returns the current EscrowPi fee policy + any developer fee configuration tied to your app.',
+    notes: ['Great for onboarding and pricing screens', 'Requires Pi auth + developer headers'],
   },
   {
     method: 'POST',
     path: '/api/v1/developer/developer-fees',
-    description: 'Retrieves fee policy and fee calculation for the given Pi amount',
-    notes: ['Great for displaying calculated fee for users before checkout', 'Requires EscrowPi developer context'],
+    description: 'Calculates the exact platform + developer fee amounts for a proposed Pi amount.',
+    notes: ['Send { amount } to preview totals before launching checkout', 'Pair the response with your own UI copy so users know fees up front'],
   },
 ];
 
 const integrationSteps = [
+  {
+    title: '0. Validate caller + receiver',
+    detail:
+      'After Pi.authenticate, call POST /developer/validation/caller and show any 403 message (current_user_not_activated or pi_user_not_onboarded). Require POST /developer/validation/receiver before enabling the pay button and block inactive recipients.',
+  },
   {
     title: '1. Obtain a Pi access token',
     detail:
@@ -68,12 +97,12 @@ const integrationSteps = [
   {
     title: '2. Issue an invocation token',
     detail:
-      'From your backend call GET /api/v1/developer/buttons/pay with the Pi token and EscrowPi headers. Use the invocationId and expiresAt for further API calls.',
+      'From your backend call GET /api/v1/developer/buttons/pay with the Pi token and EscrowPi headers. Persist invocationId + expiresAt and re-request if you see invocation_blocked or invocation_expired.',
   },
   {
     title: '3. Build the provider redirect',
     detail:
-      'Call GET /api/v1/developer/buttons/pay/redirect with the invocationId, returnUrl, amount, memo, and optional state. EscrowPi signs and returns providerRedirect.url.',
+      'Call GET /api/v1/developer/buttons/pay/redirect with the invocationId, returnUrl, amount, memo, optional recipientPiUsername, and state. EscrowPi re-validates recipients here and returns 403 if they still need activation.',
   },
   {
     title: '4. Launch the checkout',
@@ -83,7 +112,7 @@ const integrationSteps = [
   {
     title: '5. Verify the provider return',
     detail:
-      'Capture every query parameter EscrowPi appended to your returnUrl and POST them to /api/v1/developer/provider/return/verify. Persist the verified orderNo + state.',
+      'Capture every query parameter EscrowPi appended to your returnUrl and POST them to /api/v1/developer/provider/return/verify. Persist the verified orderNo + state for reconciliation.',
   },
   {
     title: '6. Track and notify',
@@ -93,8 +122,10 @@ const integrationSteps = [
 ];
 
 const bestPractices = [
+  'Run caller validation after every Pi authentication and receiver validation before enabling Pay with EscrowPi. Do not let the flow advance until both succeed.',
   'Never invoke EscrowPi developer APIs directly from your frontend; proxy everything through your backend.',
   'Store `x-escrowpi-api-key` in a secrets manager or environment variable and rotate it via the Developer Portal if exposure is suspected.',
+  'Surface the exact `message` EscrowPi returns (especially for 403 responses) directly above the user action so pioneers know who must activate or retry.',
   'Validate every returnUrl against your own allowlist before forwarding to EscrowPi to avoid phishing vectors.',
   'Cache invocation tokens per checkout session; if the user restarts, request a fresh token instead of reusing expired ones.',
   'Log the `state` payload you send to EscrowPi so you can reconcile orders with your internal IDs instantly.',
