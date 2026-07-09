@@ -85,3 +85,8 @@ body {
 .hamburger-btn .hamburger-icon { color: var(--default-tertiary-color) !important; cursor: not-allowed; }
 [data-ready='true'] .hamburger-btn { pointer-events: auto; }
 [data-ready='true'] .hamburger-btn .hamburger-icon { color: var(--default-secondary-color) !important; cursor: pointer; }
+[data-provider-locked='true'] .hamburger-btn { pointer-events: none !important; }
+[data-provider-locked='true'] .hamburger-btn .hamburger-icon {
+  color: var(--default-tertiary-color) !important;
+  cursor: default !important;
+}

@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useLayoutEffect, useMemo, useState, useContext } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useContext } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
@@ -7,9 +7,46 @@ import { toast } from 'react-toastify';
 import NotificationDialog from '@/components/NotificationDialog';
 import { AppContext } from '@/context/AppContextProvider';
 import { payWithPi } from '@/config/payment';
-import { OrderTypeEnum, PaymentDataType } from '@/types';
+import { ActivationInitiationPayload, IUserLookup, OrderTypeEnum, PaymentDataType } from '@/types';
 import { createOrder, confirmRequestOrder } from '@/services/orderApi';
 import { getNotifications } from '@/services/notificationApi';
+import { initiateActivationPayment } from '@/services/activationApi';
+import { lookupUserByUsername } from '@/services/userApi';
+
+const describeError = (err: any): string => {
+  const message = err?.response?.data?.message ?? err?.message;
+  if (typeof message === 'string' && message.trim().length) {
+    return message.trim();
+  }
+  return 'Something went wrong. Please try again.';
+};
+
+const normalizePiUsername = (value: string): string => value.trim();
+const normalizeUsernameForComparison = (value: string): string => {
+  return normalizePiUsername(value).replace(/^@+/, '').toLowerCase();
+};
+
+type CounterpartyLookupState =
+  | { state: 'idle'; user: null; message?: string }
+  | { state: 'checking'; user: null; message?: string }
+  | { state: 'found'; user: IUserLookup; message?: string }
+  | { state: 'not_found'; user: null; message?: string }
+  | { state: 'error'; user: null; message: string };
+
+type CounterpartyStatusTone = 'muted' | 'info' | 'success' | 'warning' | 'error';
+
+type CounterpartyStatusDescriptor = {
+  text: string;
+  tone: CounterpartyStatusTone;
+};
+
+const COUNTERPARTY_TONE_CLASSES: Record<CounterpartyStatusTone, string> = {
+  muted: 'text-gray-500',
+  info: 'text-sky-600',
+  success: 'text-emerald-600',
+  warning: 'text-amber-600',
+  error: 'text-rose-600',
+};
 
 function Splash() {
   return (
@@ -21,7 +58,7 @@ function Splash() {
 
 export default function HomePage() {
   // Always start as loading on server and first client render to avoid hydration mismatch
-  const { currentUser, setIsSaveLoading, isSaveLoading, isSigningInUser } = useContext(AppContext);
+  const { currentUser, setIsSaveLoading, isSaveLoading, isSigningInUser, autoLoginUser } = useContext(AppContext);
   const [loading, setLoading] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     try {
@@ -44,6 +81,63 @@ export default function HomePage() {
   const [orderNo, setOrderNo] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showNotificationPopup, setShowNotificationPopup] = useState(false);
+  const [activationModalOpen, setActivationModalOpen] = useState(false);
+  const [activationPayload, setActivationPayload] = useState<ActivationInitiationPayload | null>(null);
+  const [activationLoading, setActivationLoading] = useState(false);
+  const [activationSubmitting, setActivationSubmitting] = useState(false);
+  const [counterpartyLookup, setCounterpartyLookup] = useState<CounterpartyLookupState>({ state: 'idle', user: null });
+  const counterpartyLookupTimeout = useRef<number | null>(null);
+  const lastKnownActivationStatusRef = useRef<boolean | null>(currentUser?.isActive ?? null);
+  const normalizedCounterparty = useMemo(() => normalizePiUsername(counterparty).replace(/^@/, ''), [counterparty]);
+  const normalizedCounterpartyForComparison = useMemo(
+    () => normalizeUsernameForComparison(counterparty),
+    [counterparty]
+  );
+  const normalizedCurrentUserUsername = useMemo(
+    () => normalizeUsernameForComparison(currentUser?.pi_username ?? ''),
+    [currentUser?.pi_username]
+  );
+  const counterpartyStatus = useMemo<CounterpartyStatusDescriptor>(() => {
+    if (!normalizedCounterparty) {
+      return { text: 'Enter an active payer/payee Pi username', tone: 'muted' };
+    }
+    if (
+      normalizedCounterpartyForComparison &&
+      normalizedCurrentUserUsername &&
+      normalizedCounterpartyForComparison === normalizedCurrentUserUsername
+    ) {
+      return { text: 'You cannot create an EscrowPi transaction with yourself.', tone: 'warning' };
+    }
+    switch (counterpartyLookup.state) {
+      case 'checking':
+        return { text: 'Checking status of Pi username…', tone: 'info' };
+      case 'not_found':
+        return { text: 'User not registred with EscrowPi yet.', tone: 'warning' };
+      case 'error':
+        return { text: counterpartyLookup.message ?? 'Unable to verify Pioneer.', tone: 'error' };
+      case 'found':
+        return counterpartyLookup.user?.isActive
+          ? { text: `@${counterpartyLookup.user.pi_username} is ready for EscrowPi transaction.`, tone: 'success' }
+          : { text: `@${counterpartyLookup.user.pi_username} must activate their EscrowPi account.`, tone: 'warning' };
+      default:
+        return { text: 'Enter an active payer/payee Pi username', tone: 'muted' };
+    }
+  }, [normalizedCounterparty, counterpartyLookup, normalizedCounterpartyForComparison, normalizedCurrentUserUsername]);
+
+  const counterpartyStatusIcon = useMemo(() => {
+    switch (counterpartyStatus.tone) {
+      case 'success':
+        return '✅';
+      case 'info':
+        return 'ℹ️';
+      case 'warning':
+        return '⚠️';
+      case 'error':
+        return '⛔';
+      default:
+        return '👤';
+    }
+  }, [counterpartyStatus]);
 
   // Decide splash behavior before paint to minimize flash and keep SSR/CSR consistent
   useLayoutEffect(() => {
@@ -77,6 +171,17 @@ export default function HomePage() {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    const previousStatus = lastKnownActivationStatusRef.current;
+    const currentStatus = currentUser?.isActive ?? null;
+
+    if (previousStatus === false && currentStatus === true) {
+      toast.success('Account activation completed. You can now use EscrowPi.');
+    }
+
+    lastKnownActivationStatusRef.current = currentStatus;
+  }, [currentUser?.isActive]);
+
   // Check for uncleared notifications and show dialog once per session
   useEffect(() => {
     const checkUncleared = async () => {
@@ -104,6 +209,39 @@ export default function HomePage() {
       checkUncleared();
     }
   }, [currentUser?.pi_uid, loading]);
+
+  useEffect(() => {
+    if (counterpartyLookupTimeout.current) {
+      clearTimeout(counterpartyLookupTimeout.current);
+      counterpartyLookupTimeout.current = null;
+    }
+
+    if (!normalizedCounterparty) {
+      setCounterpartyLookup({ state: 'idle', user: null });
+      return;
+    }
+
+    setCounterpartyLookup({ state: 'checking', user: null });
+    counterpartyLookupTimeout.current = window.setTimeout(async () => {
+      try {
+        const user = await lookupUserByUsername(normalizedCounterparty);
+        setCounterpartyLookup({ state: 'found', user });
+      } catch (err: any) {
+        if (err?.response?.status === 404) {
+          setCounterpartyLookup({ state: 'not_found', user: null });
+          return;
+        }
+        setCounterpartyLookup({ state: 'error', user: null, message: describeError(err) });
+      }
+    }, 450);
+
+    return () => {
+      if (counterpartyLookupTimeout.current) {
+        clearTimeout(counterpartyLookupTimeout.current);
+        counterpartyLookupTimeout.current = null;
+      }
+    };
+  }, [counterparty, normalizedCounterparty]);
 
   // No longer manipulating body attributes; Navbar listens for 'escrowpi:ready'
 
@@ -140,6 +278,82 @@ export default function HomePage() {
     return '28px';
   }, [amountInput]);
 
+  const isCurrentUserActive = Boolean(currentUser?.isActive);
+
+  const ensureActivationPayload = useCallback(async () => {
+    try {
+      setActivationLoading(true);
+      const payload = await initiateActivationPayment();
+      setActivationPayload(payload);
+      setActivationModalOpen(true);
+    } catch (err: any) {
+      toast.error(describeError(err));
+    } finally {
+      setActivationLoading(false);
+    }
+  }, []);
+
+  const handleOpenActivationModal = () => {
+    if (isCurrentUserActive) {
+      toast.info('Your account is already activated.');
+      return;
+    }
+    if (activationPayload) {
+      setActivationModalOpen(true);
+      return;
+    }
+    ensureActivationPayload();
+  };
+
+  const ensureActivationEligibility = (orderType: OrderTypeEnum): boolean => {
+    if (!isCurrentUserActive) {
+      toast.error('Activate your EscrowPi account before continuing.');
+      return false;
+    }
+
+    const normalizedInput = normalizePiUsername(counterparty);
+    if (!normalizedInput) {
+      toast.error(orderType === OrderTypeEnum.Send ? 'Please enter Payee Pioneer Name' : 'Please enter Payer Pioneer Name');
+      return false;
+    }
+
+    if (
+      normalizedCounterpartyForComparison &&
+      normalizedCurrentUserUsername &&
+      normalizedCounterpartyForComparison === normalizedCurrentUserUsername
+    ) {
+      toast.error('You cannot create an EscrowPi transaction with your own Pioneer name. Please choose a different payee/payer.');
+      return false;
+    }
+
+    if (counterpartyLookup.state === 'checking') {
+      toast.info('Hang on while we verify the counterparty.');
+      return false;
+    }
+
+    if (counterpartyLookup.state === 'error') {
+      toast.error(counterpartyLookup.message || 'Unable to verify counterparty.');
+      return false;
+    }
+
+    if (counterpartyLookup.state === 'not_found' || counterpartyLookup.state === 'idle') {
+      toast.error('We couldn’t find that Pioneer on EscrowPi yet.');
+      return false;
+    }
+
+    if (counterpartyLookup.state !== 'found' || !counterpartyLookup.user) {
+      toast.error('Please verify the Pioneer username before continuing.');
+      return false;
+    }
+
+    if (!counterpartyLookup.user.isActive) {
+      toast.error(`@${counterpartyLookup.user.pi_username} must activate their EscrowPi account before you can continue.`);
+      return false;
+    }
+
+    return true;
+  };
+
   const reset = () => {
     setIsSaveLoading(false)
     setShowSend(false);
@@ -154,14 +368,12 @@ export default function HomePage() {
 
   // Validate inputs and open the appropriate modal
   const handleOpen = async (orderType: OrderTypeEnum) => {
-    const name = counterparty.trim();
-    const desc = details.trim();
-    const n = parseFloat((amountInput || '').replace(',', '.'));
-
-    if (!name) {
-      toast.error(orderType === OrderTypeEnum.Send ? 'Please enter Payee Pioneer Name' : 'Please enter Payer Pioneer Name');
+    if (!ensureActivationEligibility(orderType)) {
       return;
     }
+
+    const desc = details.trim();
+    const n = parseFloat((amountInput || '').replace(',', '.'));
     if (!desc) {
       toast.error('Please enter EscrowPi Details');
       return;
@@ -193,6 +405,9 @@ export default function HomePage() {
       toast.error('SCREEN.MEMBERSHIP.VALIDATION.USER_NOT_LOGGED_IN_PAYMENT_MESSAGE')
       return 
     }
+    if (!ensureActivationEligibility(orderType)) {
+      return;
+    }
     setIsSaveLoading(true)
 
     // Create order with status initiated; store total amount
@@ -223,6 +438,9 @@ export default function HomePage() {
 
   const handleRequest = async () => {
     if (!currentUser) return
+    if (!ensureActivationEligibility(OrderTypeEnum.Request)) {
+      return;
+    }
     setIsSaveLoading(true)
     // Create order with status initiated; store total amount
     const total = fees.total;
@@ -269,6 +487,10 @@ export default function HomePage() {
               rows={2}
               className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 shadow-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--default-primary-color)] focus:border-[var(--default-primary-color)]"
             />
+            <div className={`mt-2 flex items-center gap-2 text-xs font-medium ${COUNTERPARTY_TONE_CLASSES[counterpartyStatus.tone]}`}>
+              <span>{counterpartyStatusIcon}</span>
+              <span>{counterpartyStatus.text}</span>
+            </div>
             <div className="mt-4">
               <label className="block text-lg font-black text-gray-900 text-center">Add Comment</label>
               <textarea
@@ -410,7 +632,62 @@ export default function HomePage() {
                 />
               </Link>
             </div>
+            {!isCurrentUserActive && (
+              <div className="mt-4 text-center text-base text-rose-600">
+                <button
+                  type="button"
+                  onClick={handleOpenActivationModal}
+                  className="font-semibold text-base"
+                >
+                  Activate your account
+                </button>
+              </div>
+            )}
           </div>
+
+        <Modal
+          open={activationModalOpen}
+          onClose={() => setActivationModalOpen(false)}
+          onConfirm={async () => {
+            if (!activationPayload || !currentUser) return;
+            try {
+              setActivationSubmitting(true);
+              const paymentData: PaymentDataType = {
+                amount: activationPayload.amount,
+                memo: activationPayload.memo,
+                metadata: activationPayload.metadata,
+              };
+              await payWithPi(paymentData, async () => {
+                setActivationModalOpen(false);
+                setActivationPayload(null);
+                await autoLoginUser();
+              }, (err: Error) => {
+                toast.error(err.message || 'Activation payment failed');
+              });
+            } finally {
+              setActivationSubmitting(false);
+            }
+          }}
+          confirmText="Pay 1 Pi"
+          confirmLoading={activationSubmitting}
+          title={<div className="space-y-2 text-center">
+            <div className="text-sm uppercase tracking-wide text-rose-500">Account activation</div>
+            <div className="text-3xl font-semibold text-gray-900">1 Pi deposit</div>
+          </div>}
+        >
+          {activationPayload ? (
+            <div className="space-y-3 text-sm text-gray-700">
+              <p>We'll redirect you to Pi payment to deposit 1 Pi into EscrowPi. This unlocks both Pay and Receive buttons for your account.</p>
+              <ul className="list-disc space-y-1 pl-5 text-xs text-gray-600">
+                <li>No orders are created for activation.</li>
+                <li>We store your Pi wallet address to enable escrow payouts.</li>
+                <li>You only need to do this once per account.</li>
+              </ul>
+            </div>
+          ) : (
+            <div className="text-center text-sm text-gray-500">Preparing activation details…</div>
+          )}
+        </Modal>
 
         {/* Send Popup (screenshot design) */}
         <Modal

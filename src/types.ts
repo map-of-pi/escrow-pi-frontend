@@ -2,7 +2,24 @@ export interface IUser {
   pi_uid: string;
   pi_username: string;
   user_name: string;
+  isAdmin?: boolean;
+  wallet_address?: string | null;
+  isActive?: boolean;
 };
+
+export type ActivationInitiationPayload = {
+  amount: number;
+  memo: string;
+  metadata: Record<string, any>;
+};
+
+export interface IUserLookup {
+  pi_uid: string;
+  pi_username: string;
+  user_name: string;
+  isActive: boolean;
+  wallet_address: string | null;
+}
 
 export type PaymentDataType = {
   amount: number;
@@ -21,10 +38,18 @@ export type IOrder = {
   sender_username: string;
   receiver_username: string;
   amount: number;
+  base_amount?: number | null;
   order_no: string;
   status: string;
   createdAt: Date;
   updatedAt: Date;
+  developer_app_name?: string;
+  developer_fee?: {
+    enabled?: boolean | null;
+    developer_app_id?: string | null;
+    developer_pi_uid?: string | null;
+    percent?: number | null;
+  } | null;
   dispute?: {
     is_disputed?: boolean;
     status?: 'none' | 'proposed' | 'accepted' | 'declined' | 'cancelled';
