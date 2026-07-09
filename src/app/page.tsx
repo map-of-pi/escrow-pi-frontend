@@ -368,24 +368,18 @@ export default function HomePage() {
 
   // Validate inputs and open the appropriate modal
   const handleOpen = async (orderType: OrderTypeEnum) => {
-    const name = counterparty.trim();
-    const desc = details.trim();
-    const n = parseFloat((amountInput || '').replace(',', '.'));
-
-    if (!name) {
-      toast.error(orderType === OrderTypeEnum.Send ? 'Please enter Payee Pioneer Name' : 'Please enter Payer Pioneer Name');
+    if (!ensureActivationEligibility(orderType)) {
       return;
     }
+
+    const desc = details.trim();
+    const n = parseFloat((amountInput || '').replace(',', '.'));
     if (!desc) {
       toast.error('Please enter EscrowPi Details');
       return;
     }
     if (!Number.isFinite(n) || n <= 0) {
       toast.error('Please enter a Pi amount greater than 0');
-      return;
-    }
-
-    if (!ensureActivationEligibility(orderType)) {
       return;
     }
 
